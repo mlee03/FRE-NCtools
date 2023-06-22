@@ -308,6 +308,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 	} //if(g_nxgrid>0)
 
       	free(mask);
+#pragma acc exit data delete(mask)
 	if(nxgrid > 0) {
 	  nxgrid_prev = interp[n].nxgrid;
 	  interp[n].nxgrid += nxgrid;
@@ -397,9 +398,9 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 	    free(xgrid_area);
 	    if(xgrid_clon) free(xgrid_clon);
 	    if(xgrid_clat) free(xgrid_clat);
+#pragma acc exit data delete(i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat)
 	  }
 	}  /* if(nxgrid>0) */
-#pragma acc exit data delete(mask)
       }//ntiles_in
 #pragma acc exit data delete( counts_per_ij, ij_start, ij_end, grid_in[m].lonc, grid_in[m].latc )
 #pragma acc exit data delete( grid_in[m].lonc, grid_in[m].latc)
