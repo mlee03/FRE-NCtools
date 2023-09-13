@@ -131,6 +131,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
             double *g_area, *g_clon, *g_clat;
 
             time_start = clock();
+
             malloc_arrays(MAXXGRID, &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon , &xgrid_clat);
             nxgrid = create_xgrid_2dx2d_order2(&nx_in, &ny_now, &nx_out, &ny_out, grid_in[m].lonc+jstart*(nx_in+1),
                                                grid_in[m].latc+jstart*(nx_in+1),  grid_out[n].lonc,  grid_out[n].latc,

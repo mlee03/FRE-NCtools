@@ -33,19 +33,27 @@ double poly_ctrlat(const double lon[], const double lat[], int n);
 double box_ctrlon(double ll_lon, double ll_lat, double ur_lon, double ur_lat, double clon);
 double box_ctrlat(double ll_lon, double ll_lat, double ur_lon, double ur_lat);
 int get_maxxgrid(void);
+void malloc_list( const int nlon_out,  const int nlat_out,
+                  double **lat_out_min_list, double **lat_out_max_list,
+                  double **lon_out_min_list, double **lon_out_max_list,
+                  double **lon_out_avg, double **lon_out_list, double **lat_out_list, int **n2_list);
+void get_list( const int nlon_out, const int nlat_out,
+               const double *lon_in, const double *lat_in, const double *lon_out, const double *lat_out,
+               double *lat_out_min_list, double *lat_out_max_list, double *lon_out_min_list, double *lon_out_max_list,
+               double *lon_out_avg, double *lon_out_list, double *lat_out_list, int *n2_list);
 void get_grid_area(const int *nlon, const int *nlat, const double *lon, const double *lat, double *area);
 void get_grid_great_circle_area(const int *nlon, const int *nlat, const double *lon, const double *lat, double *area);
 //void get_grid_area_dimensionless(const int *nlon, const int *nlat, const double *lon, const double *lat, double *area);
 void get_grid_area_no_adjust(const int *nlon, const int *nlat, const double *lon, const double *lat, double *area);
 #pragma acc routine seq
 int clip(const double lon_in[], const double lat_in[], int n_in, double ll_lon, double ll_lat,
-	 double ur_lon, double ur_lat, double lon_out[], double lat_out[]);
+   double ur_lon, double ur_lat, double lon_out[], double lat_out[]);
 void pimod(double x[],int nn);
 #pragma acc routine seq
 int clip_2dx2d(const double lon1_in[], const double lat1_in[], int n1_in,
-	       const double lon2_in[], const double lat2_in[], int n2_in,
-	       double lon_out[], double lat_out[]);
+         const double lon2_in[], const double lat2_in[], int n2_in,
+         double lon_out[], double lat_out[]);
 int clip_2dx2d_great_circle(const double x1_in[], const double y1_in[], const double z1_in[], int n1_in,
-			    const double x2_in[], const double y2_in[], const double z2_in [], int n2_in,
-			    double x_out[], double y_out[], double z_out[]);
+          const double x2_in[], const double y2_in[], const double z2_in [], int n2_in,
+          double x_out[], double y_out[], double z_out[]);
 #endif
