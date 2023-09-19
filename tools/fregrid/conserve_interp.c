@@ -196,10 +196,9 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
           else
             mpp_error("conserve_interp: interp_method should be CONSERVE_ORDER1 or CONSERVE_ORDER2");
 
-        } //read or compute
+        } // opcode not great_circle
 
 
-//for all opcodes
         get_interp_struct(nxgrid, m, n, opcode, interp, i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat);
         malloc_xgrid_arrays(zero, &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon , &xgrid_clat);
 #pragma acc exit data delete(grid_in[m].latc, grid_in[m].lonc)
