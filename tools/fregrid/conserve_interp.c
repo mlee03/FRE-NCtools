@@ -54,11 +54,6 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   double *xgrid_area=NULL, *xgrid_clon=NULL, *xgrid_clat=NULL;
   int mxxgrid, zero=0;
 
-  typedef struct{
-    double *area;
-    double *clon;
-    double *clat;
-  } CellStruct;
   CellStruct *cell_in;
 
   double time_nxgrid=0;
@@ -226,58 +221,8 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 
 
 //for all opcodes
-        if(nxgrid > 0) {
-          nxgrid_prev = interp[n].nxgrid;
-          interp[n].nxgrid += nxgrid;
-          if(nxgrid_prev == 0 ) {
-            interp[n].i_in   = (int    *)malloc(interp[n].nxgrid*sizeof(int   ));
-            interp[n].j_in   = (int    *)malloc(interp[n].nxgrid*sizeof(int   ));
-            interp[n].i_out  = (int    *)malloc(interp[n].nxgrid*sizeof(int   ));
-            interp[n].j_out  = (int    *)malloc(interp[n].nxgrid*sizeof(int   ));
-            interp[n].area   = (double *)malloc(interp[n].nxgrid*sizeof(double));
-            interp[n].t_in   = (int    *)malloc(interp[n].nxgrid*sizeof(int   ));
-            for(i=0; i<interp[n].nxgrid; i++) {
-              interp[n].t_in [i] = m;
-              interp[n].i_in [i] = i_in [i];
-              interp[n].j_in [i] = j_in [i];
-              interp[n].i_out[i] = i_out[i];
-              interp[n].j_out[i] = j_out[i];
-              interp[n].area[i]  = xgrid_area[i];
-            }
-            if(opcode & CONSERVE_ORDER2) {
-              interp[n].di_in   = (double *)malloc(interp[n].nxgrid*sizeof(double));
-              interp[n].dj_in   = (double *)malloc(interp[n].nxgrid*sizeof(double));
-              for(i=0; i<interp[n].nxgrid; i++) {
-                interp[n].di_in [i] = xgrid_clon[i]/xgrid_area[i];
-                interp[n].dj_in [i] = xgrid_clat[i]/xgrid_area[i];
-              }
-            }
-          }
-          else {
-            interp[n].i_in   = (int    *)realloc(interp[n].i_in,  interp[n].nxgrid*sizeof(int   ));
-            interp[n].j_in   = (int    *)realloc(interp[n].j_in,  interp[n].nxgrid*sizeof(int   ));
-            interp[n].i_out  = (int    *)realloc(interp[n].i_out, interp[n].nxgrid*sizeof(int   ));
-            interp[n].j_out  = (int    *)realloc(interp[n].j_out, interp[n].nxgrid*sizeof(int   ));
-            interp[n].area   = (double *)realloc(interp[n].area,  interp[n].nxgrid*sizeof(double));
-            interp[n].t_in   = (int    *)realloc(interp[n].t_in,  interp[n].nxgrid*sizeof(int   ));
-            for(i=0; i<nxgrid; i++) {
-              interp[n].t_in [nxgrid_prev+i] = m;
-              interp[n].i_in [nxgrid_prev+i] = i_in [i];
-              interp[n].j_in [nxgrid_prev+i] = j_in [i];
-              interp[n].i_out[nxgrid_prev+i] = i_out[i];
-              interp[n].j_out[nxgrid_prev+i] = j_out[i];
-              interp[n].area [nxgrid_prev+i] = xgrid_area[i];
-            }
-            if(opcode & CONSERVE_ORDER2) {
-              interp[n].di_in   = (double *)realloc(interp[n].di_in, interp[n].nxgrid*sizeof(double));
-              interp[n].dj_in   = (double *)realloc(interp[n].dj_in, interp[n].nxgrid*sizeof(double));
-              for(i=0; i<nxgrid; i++) {
-                interp[n].di_in [i+nxgrid_prev] = xgrid_clon[i]/xgrid_area[i];
-                interp[n].dj_in [i+nxgrid_prev] = xgrid_clat[i]/xgrid_area[i];
-              }
-            }
-          }
-        }  /* if(nxgrid>0) */
+        init_interp_struct(nxgrid, m, n, opcode, interp,
+                           i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat);
         malloc_xgrid_arrays(zero, &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon , &xgrid_clat);
 #pragma acc exit data delete(grid_in[m].latc, grid_in[m].lonc)
       } // ntiles_in

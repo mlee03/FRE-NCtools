@@ -27,4 +27,9 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
 void malloc_xgrid_arrays( int nsize, int **i_in, int **j_in, int **i_out, int **j_out,
                           double **xgrid_area, double **xgrid_clon, double **xgrid_clat );
 
+void init_interp_struct(const int nxgrid, const int m, const int n,unsigned int opcode, Interp_config *interp,
+                        const int *i_in, const int *j_in, const int *i_out, const int *j_out,
+                        const double *xgrid_area, const double *xgrid_clon, const double *xgrid_clat);
+
+
 #endif
