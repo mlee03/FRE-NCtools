@@ -155,11 +155,75 @@ void malloc_xgrid_arrays( int nsize, int **i_in, int **j_in, int **i_out, int **
 
 }
 /*******************************************************************************
+  void malloc cell_in()
+  allocate cell_in to be used with OPCODE == CONSERVE_ORDER2
+*******************************************************************************/
+/*void malloc_cell_in(const int nsize, const int ntiles_in, CellStruct **cell_in)
+{
+
+  *cell_in  = (CellStruct *)malloc(ntiles_in * sizeof(CellStruct));
+  for(int m=0; m<ntiles_in; m++) {
+    *cell_in[m].area = (double *)malloc(nsize*sizeof(double));
+    *cell_in[m].clon = (double *)malloc(nsize*sizeof(double));
+    *cell_in[m].clat = (double *)malloc(nsize*sizeof(double));
+    for(int n=0; n<nsize; n++) {
+      *cell_in[m].area[n] = 0;
+      *cell_in[m].clon[n] = 0;
+      *cell_in[m].clat[n] = 0;
+    }
+  }
+
+}//malloc_cell_in
+*/
+
+/*******************************************************************************
+void get_cell_in( const int nxgrid, const int nx_in, const int m, const int *i_in, const int *j_in,
+                  const double *xgrid_area, const double *xgrid_clon, const double *xgrid_clat,
+                  CellStruct *cell_in)
+********************************************************************************/
+void get_cell_in( const int nxgrid, const int nx_in, const int m, const int *i_in, const int *j_in,
+                  const double *xgrid_area, const double *xgrid_clon, const double *xgrid_clat,
+                  CellStruct *cell_in)
+{
+
+  int g_nxgrid, ii;
+  int *g_i_in=NULL, *g_j_in=NULL;
+  double *g_clon=NULL, *g_clat=NULL, *g_area=NULL;
+
+  g_nxgrid = nxgrid;
+  mpp_sum_int(1, &g_nxgrid);
+  if(g_nxgrid > 0) {
+    g_i_in = (int    *)malloc(g_nxgrid*sizeof(int   ));
+    g_j_in = (int    *)malloc(g_nxgrid*sizeof(int   ));
+    g_area = (double *)malloc(g_nxgrid*sizeof(double));
+    g_clon = (double *)malloc(g_nxgrid*sizeof(double));
+    g_clat = (double *)malloc(g_nxgrid*sizeof(double));
+    mpp_gather_field_int   (nxgrid, i_in,       g_i_in);
+    mpp_gather_field_int   (nxgrid, j_in,       g_j_in);
+    mpp_gather_field_double(nxgrid, xgrid_area, g_area);
+    mpp_gather_field_double(nxgrid, xgrid_clon, g_clon);
+    mpp_gather_field_double(nxgrid, xgrid_clat, g_clat);
+    for(int i=0; i<g_nxgrid; i++) {
+      ii = g_j_in[i]*nx_in+g_i_in[i];
+      cell_in[m].area[ii] += g_area[i];
+      cell_in[m].clon[ii] += g_clon[i];
+      cell_in[m].clat[ii] += g_clat[i];
+    }
+    free(g_i_in);
+    free(g_j_in);
+    free(g_area);
+    free(g_clon);
+    free(g_clat);
+  } // if g_nxgrid > 0
+
+}
+
+/*******************************************************************************
   void init_interp_struct(const int nxgrid, const int m, const int n,
                           unsigned int opcode, Interp_config *interp)
   initializes/fills in the values of struct interp
 *******************************************************************************/
-void init_interp_struct(const int nxgrid, const int m, const int n, unsigned int opcode, Interp_config *interp,
+void get_interp_struct(const int nxgrid, const int m, const int n, unsigned int opcode, Interp_config *interp,
                         const int *i_in, const int *j_in, const int *i_out, const int *j_out,
                         const double *xgrid_area, const double *xgrid_clon, const double *xgrid_clat)
 {

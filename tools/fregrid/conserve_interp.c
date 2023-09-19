@@ -159,8 +159,6 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
           } //opcode CONSERVE_ORDER1
 
           else if(opcode & CONSERVE_ORDER2) {
-            int g_nxgrid, *g_i_in, *g_j_in;
-            double *g_area, *g_clon, *g_clat;
 
             time_start = clock();
 
@@ -191,47 +189,29 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
                               i_in[0:mxxgrid], j_in[0:mxxgrid], i_out[0:mxxgrid],j_out[0:mxxgrid])
 
             for(i=0; i<nxgrid; i++) j_in[i] += jstart;
-
             /* For the purpose of bitiwise reproducing, the following operation is needed. */
-            g_nxgrid = nxgrid;
-            mpp_sum_int(1, &g_nxgrid);
-            if(g_nxgrid > 0) {
-              g_i_in = (int    *)malloc(g_nxgrid*sizeof(int   ));
-              g_j_in = (int    *)malloc(g_nxgrid*sizeof(int   ));
-              g_area = (double *)malloc(g_nxgrid*sizeof(double));
-              g_clon = (double *)malloc(g_nxgrid*sizeof(double));
-              g_clat = (double *)malloc(g_nxgrid*sizeof(double));
-              mpp_gather_field_int   (nxgrid, i_in,       g_i_in);
-              mpp_gather_field_int   (nxgrid, j_in,       g_j_in);
-              mpp_gather_field_double(nxgrid, xgrid_area, g_area);
-              mpp_gather_field_double(nxgrid, xgrid_clon, g_clon);
-              mpp_gather_field_double(nxgrid, xgrid_clat, g_clat);
-              for(i=0; i<g_nxgrid; i++) {
-                ii = g_j_in[i]*nx_in+g_i_in[i];
-                cell_in[m].area[ii] += g_area[i];
-                cell_in[m].clon[ii] += g_clon[i];
-                cell_in[m].clat[ii] += g_clat[i];
-              }
-              free(g_i_in); free(g_j_in); free(g_area); free(g_clon); free(g_clat);
-            } // if g_nxgrid > 0
-          }
+            get_cell_in( nxgrid,  nx_in, m, i_in, j_in, xgrid_area, xgrid_clon, xgrid_clat, cell_in);
+
+          }//opcode CONSERVE_ORDER2
           else
             mpp_error("conserve_interp: interp_method should be CONSERVE_ORDER1 or CONSERVE_ORDER2");
-        } //opcode CONSERVE_ORDER2
+
+        } //read or compute
 
 
 //for all opcodes
-        init_interp_struct(nxgrid, m, n, opcode, interp,
-                           i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat);
+        get_interp_struct(nxgrid, m, n, opcode, interp, i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat);
         malloc_xgrid_arrays(zero, &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon , &xgrid_clat);
 #pragma acc exit data delete(grid_in[m].latc, grid_in[m].lonc)
       } // ntiles_in
+
       malloc_minmaxavg_lists(zero, &lon_out_min_list, &lon_out_max_list,
                              &lat_out_min_list, &lat_out_max_list, &n2_list,
                              &lon_out_avg, &lon_out_list, &lat_out_list);
+#pragma acc exit data delete(grid_out[n].latc, grid_out[n].lonc)
 #pragma acc exit data delete(lon_out_min_list, lon_out_max_list, lat_out_min_list, \
                              lat_out_max_list, n2_list, lon_out_avg, lon_out_list, lat_out_list)
-#pragma acc exit data delete(grid_out[n].latc, grid_out[n].lonc)
+
     } // ntimes_out
 
     if(DEBUG) print_time("time_nxgrid", time_nxgrid);
