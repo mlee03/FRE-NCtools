@@ -39,5 +39,8 @@ void get_jstart_jend( const int nx_out, const int ny_out, const int nx_in, const
                       const double *lat_out, const double *lat_in,
                       int *jstart, int *jend, int *ny_now ) ;
 
+void get_interp_dij(const int ntiles_in, const int ntiles_out,
+                    const Grid_config *grid_in, CellStruct *cell_in, Interp_config *interp);
+
 
 #endif
