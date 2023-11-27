@@ -42,5 +42,6 @@ void get_jstart_jend( const int nx_out, const int ny_out, const int nx_in, const
 void get_interp_dij(const int ntiles_in, const int ntiles_out,
                     const Grid_config *grid_in, CellStruct *cell_in, Interp_config *interp);
 
+void write_remap(const int ntiles_out, Grid_config *grid_out, Interp_config *interp, unsigned int opcode);
 
 #endif

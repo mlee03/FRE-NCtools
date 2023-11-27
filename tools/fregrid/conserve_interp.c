@@ -135,90 +135,15 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 #pragma acc exit data delete(out_minmaxavg_lists)
 #pragma acc exit data delete(grid_out[n].latc, grid_out[n].lonc)
 
-    } // ntimes_out
+    } // ntiles_out
 
     if(opcode & CONSERVE_ORDER2) get_interp_dij(ntiles_in, ntiles_out, grid_in, cell_in, interp);
 
-    if( opcode & WRITE) { /* write out remapping information */
-      for(n=0; n<ntiles_out; n++) {
-        int nxgrid;
-
-        nxgrid = interp[n].nxgrid;
-        mpp_sum_int(1, &nxgrid);
-        if(nxgrid > 0) {
-          size_t start[4], nwrite[4];
-          int    fid, dim_string, dim_ncells, dim_two, dims[4];
-          int    id_xgrid_area, id_tile1_dist;
-          int    id_tile1_cell, id_tile2_cell, id_tile1;
-          int    *gdata_int, *ldata_int;
-          double *gdata_dbl;
-
-          fid = mpp_open( interp[n].remap_file, MPP_WRITE);
-          dim_string = mpp_def_dim(fid, "string", STRING);
-          dim_ncells = mpp_def_dim(fid, "ncells", nxgrid);
-          dim_two    = mpp_def_dim(fid, "two", 2);
-          dims[0] = dim_ncells; dims[1] = dim_two;
-          id_tile1      = mpp_def_var(fid, "tile1",      NC_INT, 1, &dim_ncells, 1,
-                                      "standard_name", "tile_number_in_mosaic1");
-          id_tile1_cell = mpp_def_var(fid, "tile1_cell", NC_INT, 2, dims, 1,
-                                      "standard_name", "parent_cell_indices_in_mosaic1");
-          id_tile2_cell = mpp_def_var(fid, "tile2_cell", NC_INT, 2, dims, 1,
-                                      "standard_name", "parent_cell_indices_in_mosaic2");
-          id_xgrid_area = mpp_def_var(fid, "xgrid_area", NC_DOUBLE, 1, &dim_ncells, 2,
-                                      "standard_name", "exchange_grid_area", "units", "m2");
-          if(opcode & CONSERVE_ORDER2) id_tile1_dist = mpp_def_var(fid, "tile1_distance", NC_DOUBLE, 2, dims, 1,
-                                                                   "standard_name", "distance_from_parent1_cell_centroid");
-          mpp_end_def(fid);
-          for(i=0; i<4; i++) {
-            start[i] = 0; nwrite[i] = 1;
-          }
-          nwrite[0] = nxgrid;
-          gdata_int = (int *)malloc(nxgrid*sizeof(int));
-          if(interp[n].nxgrid>0) ldata_int = (int *)malloc(interp[n].nxgrid*sizeof(int));
-          mpp_gather_field_int(interp[n].nxgrid, interp[n].t_in, gdata_int);
-          for(i=0; i<nxgrid; i++) gdata_int[i]++;
-          mpp_put_var_value(fid, id_tile1, gdata_int);
-
-          mpp_gather_field_int(interp[n].nxgrid, interp[n].i_in, gdata_int);
-          for(i=0; i<nxgrid; i++) gdata_int[i]++;
-          mpp_put_var_value_block(fid, id_tile1_cell, start, nwrite, gdata_int);
-
-          for(i=0; i<interp[n].nxgrid; i++) ldata_int[i] = interp[n].i_out[i] + grid_out[n].isc + 1;
-          mpp_gather_field_int(interp[n].nxgrid, ldata_int, gdata_int);
-          mpp_put_var_value_block(fid, id_tile2_cell, start, nwrite, gdata_int);
-
-          mpp_gather_field_int(interp[n].nxgrid, interp[n].j_in, gdata_int);
-          for(i=0; i<nxgrid; i++) gdata_int[i]++;
-          start[1] = 1;
-          mpp_put_var_value_block(fid, id_tile1_cell, start, nwrite, gdata_int);
-
-          for(i=0; i<interp[n].nxgrid; i++) ldata_int[i] = interp[n].j_out[i] + grid_out[n].jsc + 1;
-          mpp_gather_field_int(interp[n].nxgrid, ldata_int, gdata_int);
-          mpp_put_var_value_block(fid, id_tile2_cell, start, nwrite, gdata_int);
-
-          free(gdata_int);
-          if(interp[n].nxgrid>0)free(ldata_int);
-
-          gdata_dbl = (double *)malloc(nxgrid*sizeof(double));
-          mpp_gather_field_double(interp[n].nxgrid, interp[n].area, gdata_dbl);
-          mpp_put_var_value(fid, id_xgrid_area, gdata_dbl);
-
-          if(opcode & CONSERVE_ORDER2) {
-            start[1] = 0;
-            mpp_gather_field_double(interp[n].nxgrid, interp[n].di_in, gdata_dbl);
-            mpp_put_var_value_block(fid, id_tile1_dist, start, nwrite, gdata_dbl);
-            start[1] = 1;
-            mpp_gather_field_double(interp[n].nxgrid, interp[n].dj_in, gdata_dbl);
-            mpp_put_var_value_block(fid, id_tile1_dist, start, nwrite, gdata_dbl);
-          }
-
-          free(gdata_dbl);
-          mpp_close(fid);
-        }
-      }
-    }
-    if(mpp_pe() == mpp_root_pe())printf("NOTE: done calculating index and weight for conservative interpolation\n");
+    /* write out remapping information */
+    if( opcode & WRITE) write_remap(ntiles_out, grid_out, interp, opcode);
   }
+  if(mpp_pe() == mpp_root_pe())printf("NOTE: done calculating index and weight for conservative interpolation\n");
+
 
   /* check the input area match exchange grid area */
   if(opcode & CHECK_CONSERVE) {
@@ -243,24 +168,22 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
       max_j = 0;
       /* comparing area1 and area2 */
       for(j=0; j<ny1; j++) for(i=0; i<nx1; i++) {
-  ii = j*nx1+i;
-  ratio_change = fabs(grid_out[n].cell_area[ii]-area2[ii])/grid_out[n].cell_area[ii];
-  if(ratio_change > max_ratio) {
-    max_ratio = ratio_change;
-    max_i = i;
-    max_j = j;
-  }
-  if( ratio_change > 1.e-4 ) {
-    printf("(i,j)=(%d,%d), change = %g, area1=%g, area2=%g\n", i, j, ratio_change, grid_out[n].cell_area[ii],area2[ii]);
-  }
-      }
+          ii = j*nx1+i;
+          ratio_change = fabs(grid_out[n].cell_area[ii]-area2[ii])/grid_out[n].cell_area[ii];
+          if(ratio_change > max_ratio) {
+            max_ratio = ratio_change;
+            max_i = i;
+            max_j = j;
+          }
+          if( ratio_change > 1.e-4 ) {
+            printf("(i,j)=(%d,%d), change = %g, area1=%g, area2=%g\n", i, j, ratio_change, grid_out[n].cell_area[ii],area2[ii]);
+          }
+        }
       ii = max_j*nx1+max_i;
       printf("The maximum ratio change at (%d,%d) = %g, area1=%g, area2=%g\n", max_i, max_j, max_ratio, grid_out[n].cell_area[ii],area2[ii]);
 
     }
-
     free(area2);
-
   }
 
 }; /* setup_conserve_interp */
@@ -924,5 +847,89 @@ void do_great_circle( const int n, const int m, const Grid_config *grid_in, cons
   get_interp( opcode, nxgrid, interp, m, n, i_in, j_in, i_out, j_out,
               xgrid_clon, xgrid_clat, xgrid_area );
   malloc_xgrid_arrays(zero, &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon , &xgrid_clat);
+
+}
+
+void write_remap(const int ntiles_out, Grid_config *grid_out, Interp_config *interp, unsigned int opcode)
+{
+
+  int n, i;
+
+  for(n=0; n<ntiles_out; n++) {
+    int nxgrid;
+
+    nxgrid = interp[n].nxgrid;
+    mpp_sum_int(1, &nxgrid);
+    if(nxgrid > 0) {
+      size_t start[4], nwrite[4];
+      int    fid, dim_string, dim_ncells, dim_two, dims[4];
+      int    id_xgrid_area, id_tile1_dist;
+      int    id_tile1_cell, id_tile2_cell, id_tile1;
+      int    *gdata_int, *ldata_int;
+      double *gdata_dbl;
+
+      fid = mpp_open( interp[n].remap_file, MPP_WRITE);
+      dim_string = mpp_def_dim(fid, "string", STRING);
+      dim_ncells = mpp_def_dim(fid, "ncells", nxgrid);
+      dim_two    = mpp_def_dim(fid, "two", 2);
+      dims[0] = dim_ncells; dims[1] = dim_two;
+      id_tile1      = mpp_def_var(fid, "tile1",      NC_INT, 1, &dim_ncells, 1,
+                                  "standard_name", "tile_number_in_mosaic1");
+      id_tile1_cell = mpp_def_var(fid, "tile1_cell", NC_INT, 2, dims, 1,
+                                  "standard_name", "parent_cell_indices_in_mosaic1");
+      id_tile2_cell = mpp_def_var(fid, "tile2_cell", NC_INT, 2, dims, 1,
+                                  "standard_name", "parent_cell_indices_in_mosaic2");
+      id_xgrid_area = mpp_def_var(fid, "xgrid_area", NC_DOUBLE, 1, &dim_ncells, 2,
+                                  "standard_name", "exchange_grid_area", "units", "m2");
+      if(opcode & CONSERVE_ORDER2) id_tile1_dist = mpp_def_var(fid, "tile1_distance", NC_DOUBLE, 2, dims, 1,
+                                                               "standard_name", "distance_from_parent1_cell_centroid");
+      mpp_end_def(fid);
+      for(i=0; i<4; i++) {
+        start[i] = 0; nwrite[i] = 1;
+      }
+      nwrite[0] = nxgrid;
+      gdata_int = (int *)malloc(nxgrid*sizeof(int));
+      if(interp[n].nxgrid>0) ldata_int = (int *)malloc(interp[n].nxgrid*sizeof(int));
+      mpp_gather_field_int(interp[n].nxgrid, interp[n].t_in, gdata_int);
+      for(i=0; i<nxgrid; i++) gdata_int[i]++;
+      mpp_put_var_value(fid, id_tile1, gdata_int);
+
+      mpp_gather_field_int(interp[n].nxgrid, interp[n].i_in, gdata_int);
+      for(i=0; i<nxgrid; i++) gdata_int[i]++;
+      mpp_put_var_value_block(fid, id_tile1_cell, start, nwrite, gdata_int);
+
+      for(i=0; i<interp[n].nxgrid; i++) ldata_int[i] = interp[n].i_out[i] + grid_out[n].isc + 1;
+      mpp_gather_field_int(interp[n].nxgrid, ldata_int, gdata_int);
+      mpp_put_var_value_block(fid, id_tile2_cell, start, nwrite, gdata_int);
+
+      mpp_gather_field_int(interp[n].nxgrid, interp[n].j_in, gdata_int);
+      for(i=0; i<nxgrid; i++) gdata_int[i]++;
+      start[1] = 1;
+      mpp_put_var_value_block(fid, id_tile1_cell, start, nwrite, gdata_int);
+
+      for(i=0; i<interp[n].nxgrid; i++) ldata_int[i] = interp[n].j_out[i] + grid_out[n].jsc + 1;
+      mpp_gather_field_int(interp[n].nxgrid, ldata_int, gdata_int);
+      mpp_put_var_value_block(fid, id_tile2_cell, start, nwrite, gdata_int);
+
+      free(gdata_int);
+      if(interp[n].nxgrid>0)free(ldata_int);
+
+      gdata_dbl = (double *)malloc(nxgrid*sizeof(double));
+      mpp_gather_field_double(interp[n].nxgrid, interp[n].area, gdata_dbl);
+      mpp_put_var_value(fid, id_xgrid_area, gdata_dbl);
+
+      if(opcode & CONSERVE_ORDER2) {
+        start[1] = 0;
+        mpp_gather_field_double(interp[n].nxgrid, interp[n].di_in, gdata_dbl);
+        mpp_put_var_value_block(fid, id_tile1_dist, start, nwrite, gdata_dbl);
+        start[1] = 1;
+        mpp_gather_field_double(interp[n].nxgrid, interp[n].dj_in, gdata_dbl);
+        mpp_put_var_value_block(fid, id_tile1_dist, start, nwrite, gdata_dbl);
+      }
+
+      free(gdata_dbl);
+      mpp_close(fid);
+    }
+  }
 
 }
