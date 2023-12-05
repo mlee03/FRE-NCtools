@@ -1,4 +1,4 @@
-#!/usr/bin/env bats
+#!/usr/bin/bash
 
 #***********************************************************************
 #                   GNU Lesser General Public License
@@ -23,9 +23,9 @@
 # Test make_regional_mosaic: create mosaic file for regional output and do remapping
 #             for regional output
 
-load test_utils
+#mkl:  WORK ON THIS LATER
 
-@test "Test make_regional_mosaic" {
+echo "Test make_regional_mosaic"
 
   skip "TO DO: Files are too large"
 
@@ -85,5 +85,3 @@ load test_utils
 		--output_file atmos_4xdaily_latlon.nc  \
 		--scalar_field ps  \
 		--check_conserve
-
-}

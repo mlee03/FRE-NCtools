@@ -1,4 +1,4 @@
-#!/usr/bin/env bats
+#!/usr/bin/bash
 
 #***********************************************************************
 #                   GNU Lesser General Public License
@@ -27,35 +27,25 @@
 # which is the directory name in $top_srcdir/t/Test10-input/<dir_name>
 # that contains the input data
 
-load test_utils
+echo "Test remap_land can remap land restart files"
 
-prepare_input_data ()
-{
-  local inputdir=$top_srcdir/t/Test10-input
-  for dir in $( ls -1 $inputdir )
-  do
-    local datadir=$inputdir/$dir
-    mkdir -p $dir
-    # Ensure the directory is empty
-    rm -rf $dir/*
-    # Generate the restart files
-    for file in $( ls -1 $datadir/*.ncl )
-    do
-      ncgen -o $dir/$( basename ${file} .ncl ).nc  ${file}
-    done
+dir_in=$PWD/t/Test10-input/
+dir_out=$PWD/t/Test10-output
+
+mkdir -p $dir_out
+
+for dir in `ls $dir_in` ;do
+  for ncl_file in $dir_in/$dir/*.ncl; do
+    nc_file=${ncl_file/'.ncl'/'.nc'}
+    ncgen $ncl_file -o $nc_file
   done
-}
+done
 
-@test "Test remap_land can remap land restart files" {
-
-  prepare_input_data
-
-   remap_land \
-		--file_type land  \
-		--src_mosaic C48_mosaic/C48_mosaic.nc \
-		--dst_mosaic C192_mosaic/C192_mosaic.nc \
-		--src_restart src_restart/land.res \
-		--dst_restart land.res \
-		--dst_cold_restart dst_cold_restart/land.res \
-		--remap_file remap_file_C48_to_C192 --print_memory
-}
+remap_land \
+	--file_type land  \
+	--src_mosaic $dir_in/C48_mosaic/C48_mosaic.nc \
+	--dst_mosaic $dir_in/C192_mosaic/C192_mosaic.nc \
+	--src_restart $dir_in/src_restart/land.res \
+	--dst_restart $dir_in/land.res \
+	--dst_cold_restart $dir_in/dst_cold_restart/land.res \
+	--remap_file $dir_out/remap_file_C48_to_C192 --print_memory

@@ -1,4 +1,4 @@
-#!/usr/bin/env bats
+#!/usr/bin/bash
 
 #***********************************************************************
 #                   GNU Lesser General Public License
@@ -22,11 +22,17 @@
 
 # Test remap data onto cm2m ocean grid with extrapolation and vertical interpolation
 
-load test_utils
+dir_in=$PWD/t/Test06-input
+dir_out=$PWD/t/Test06-output
+mkdir -p $dir_out
 
-@test "Test remap data onto cm2m ocean grid with extrapolation and vertical interpolation" {
+for ncl_file in $dir_in/*.ncl ; do
+  nc_file=${ncl_file/'.ncl'/'.nc'}
+  ncgen $ncl_file -o $nc_file
+done
 
-  generate_all_from_ncl
+echo "Test remap data onto cm2m ocean grid with extrapolation and vertical interpolation" {
+
 
    make_hgrid \
 		--grid_type regular_lonlat_grid \
@@ -36,23 +42,21 @@ load test_utils
 		--ybnd -90,90 \
 		--nlon 720 \
 		--nlat 360 \
-		--grid_name levitus_grid
+		--grid_name $dir_out/levitus_grid
 
    make_solo_mosaic \
 		--num_tiles 1 \
-		--dir . \
-		--mosaic_name levitus_mosaic \
+		--dir $dir_out \
+		--mosaic_name $dir_out/levitus_mosaic \
 		--tile_file levitus_grid.nc \
 		--periodx 360
 
    fregrid \
-		--input_mosaic levitus_mosaic.nc \
-		--input_file WOA09_ann_theta.nc \
+		--input_mosaic $dir_out/levitus_mosaic.nc \
+		--input_file $dir_in/WOA09_ann_theta.nc \
 		--scalar_field POTENTIAL_TEMP \
-		--output_file WOA09_ann_theta_cm2g_extrap.nc \
-		--output_mosaic ocean_mosaic.nc \
+		--output_file $dir_out/WOA09_ann_theta_cm2g_extrap.nc \
+		--output_mosaic $dir_in/ocean_mosaic.nc \
 		--extrapolate \
-		--dst_vgrid ocean_vgrid.nc \
+		--dst_vgrid $dir_in/ocean_vgrid.nc \
 		--check_conserve
-
-}

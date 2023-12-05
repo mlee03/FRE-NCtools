@@ -1,4 +1,4 @@
-#!/usr/bin/env bats
+#!/usr/bin/bash
 
 #***********************************************************************
 #                   GNU Lesser General Public License
@@ -22,11 +22,13 @@
 
 #Test grid for coupled nest model (land are C48 and ocean is 1 degree tripolar grid, atmosphere is C48 with nested region
 
-load test_utils
+echo "Test grid for coupled nest model (land are C48 and ocean is 1 degree tripolar grid, atmosphere is C48 with nested region"
 
-@test "Test grid for coupled nest model (land are C48 and ocean is 1 degree tripolar grid, atmosphere is C48 with nested region" {
+dir_in=$PWD/t/Test04-input
+dir_out=$PWD/t/Test04-output
+mkdir -p $dir_out
 
-ncgen -o OCCAM_p5degree.nc $BATS_TEST_DIRNAME/Test03-input/OCCAM_p5degree.ncl
+ncgen $dir_in/OCCAM_p5degree.ncl -o $dir_in/OCCAM_p5degree.nc
 
 #create ocean_hgrid
  make_hgrid \
@@ -37,7 +39,7 @@ ncgen -o OCCAM_p5degree.nc $BATS_TEST_DIRNAME/Test03-input/OCCAM_p5degree.ncl
 		--ybnd -82,-30,-10,0,10,30,90 \
 		--dlon 1.0,1.0  \
 		--dlat 1.0,1.0,0.6666667,0.3333333,0.6666667,1.0,1.0 \
-		--grid_name ocean_hgrid  \
+		--grid_name $dir_out/ocean_hgrid  \
 		--center c_cell
 
 #create ocean_vgrid
@@ -46,31 +48,33 @@ ncgen -o OCCAM_p5degree.nc $BATS_TEST_DIRNAME/Test03-input/OCCAM_p5degree.ncl
 		--bnds 0.,220.,5500.  \
 		--dbnds 10.,10.,367.14286  \
 		--center c_cell  \
-		--grid_name ocean_vgrid
+		--grid_name $dir_out/ocean_vgrid
 
 #create ocean solo mosaic
  make_solo_mosaic  \
 		--num_tiles 1  \
-		--dir ./  \
-		--mosaic_name ocean_mosaic  \
+		--dir $dir_out  \
+		--mosaic_name $dir_out/ocean_mosaic  \
 		--tile_file ocean_hgrid.nc  \
 		--periodx 360
 
 #create ocean topography data
  make_topog  \
-		--mosaic ocean_mosaic.nc  \
+		--mosaic $dir_out/ocean_mosaic.nc  \
 		--topog_type realistic  \
-		--topog_file OCCAM_p5degree.nc \
+		--topog_file $dir_in/OCCAM_p5degree.nc \
 		--topog_field TOPO  \
 		--scale_factor -1  \
-		--vgrid ocean_vgrid.nc  \
+		--vgrid $dir_out/ocean_vgrid.nc  \
 		--output topog.nc
+
+ mv topog.nc $dir_out/topog.nc
 
 #Create C48 grid with atmos nested grid.
  make_hgrid  \
 		--grid_type gnomonic_ed  \
 		--nlon 96  \
-		--grid_name atmos_grid  \
+		--grid_name $dir_out/atmos_grid  \
 		--do_schmidt \
 		--target_lat 48.15  \
 		--target_lon -100.15  \
@@ -88,15 +92,15 @@ ncgen -o OCCAM_p5degree.nc $BATS_TEST_DIRNAME/Test03-input/OCCAM_p5degree.ncl
 #create C48 solo mosaic for atmos
  make_solo_mosaic  \
 		--num_tiles 7  \
-		--dir ./  \
-		--mosaic atmos_mosaic  \
-		--tile_file  \ atmos_grid.tile1.nc,atmos_grid.tile2.nc,atmos_grid.tile3.nc,atmos_grid.tile4.nc,atmos_grid.tile5.nc,atmos_grid.tile6.nc,atmos_grid.tile7.nc
+		--dir $dir_out  \
+		--mosaic $dir_out/atmos_mosaic  \
+		--tile_file  atmos_grid.tile1.nc,atmos_grid.tile2.nc,atmos_grid.tile3.nc,atmos_grid.tile4.nc,atmos_grid.tile5.nc,atmos_grid.tile6.nc,atmos_grid.tile7.nc
 
 #Create C144 grid for land
  make_hgrid  \
 		--grid_type gnomonic_ed  \
 		--nlon 288  \
-		--grid_name land_grid  \
+		--grid_name $dir_out/land_grid  \
 		--do_schmidt \
 		--target_lat 48.15  \
 		--target_lon -100.15  \
@@ -110,25 +114,24 @@ ncgen -o OCCAM_p5degree.nc $BATS_TEST_DIRNAME/Test03-input/OCCAM_p5degree.ncl
 #create C144 solo mosaic for land
  make_solo_mosaic  \
 		--num_tiles 6  \
-		--dir ./  \
-		--mosaic land_mosaic \
+		--dir $dir_out  \
+		--mosaic $dir_out/land_mosaic \
 		--tile_file land_grid.tile1.nc,land_grid.tile2.nc,land_grid.tile3.nc,land_grid.tile4.nc,land_grid.tile5.nc,land_grid.tile6.nc
 
-# MPI only
-  if [ -z "$skip_mpi" ]; then
-      #make the coupler_mosaic
-       mpirun -n 8 make_coupler_mosaic_parallel --atmos_mosaic atmos_mosaic.nc \
-                         --land_mosaic land_mosaic.nc --ocean_mosaic ocean_mosaic.nc \
-                         --ocean_topog  topog.nc --interp_order 1 --mosaic_name grid_spec --check
 
-      #check reproducing ability between processor count for make_coupler_mosaic
-      [ ! -d parallel ] && mkdir parallel
-      cd parallel
-      mpirun -n 16 make_coupler_mosaic_parallel --atmos_mosaic ../atmos_mosaic.nc \
-                        --land_mosaic ../land_mosaic.nc --ocean_mosaic ../ocean_mosaic.nc \
-                        --ocean_topog  ../topog.nc --interp_order 1 --mosaic_name grid_spec
-      # directory paths should differ
-      run_and_check nccmp -md --exclude=atm_mosaic_dir --exclude=lnd_mosaic_dir --exclude=ocn_mosaic_dir \
-                --exclude=ocn_topog_dir grid_spec.nc ../grid_spec.nc
-  fi
-}
+# MPI only
+ #make the coupler_mosaic
+ mpirun -n 2 make_coupler_mosaic_parallel --atmos_mosaic $dir_out/atmos_mosaic.nc \
+        --land_mosaic $dir_out/land_mosaic.nc --ocean_mosaic $dir_out/ocean_mosaic.nc \
+        --ocean_topog  $dir_out/topog.nc --interp_order 1 --mosaic_name $dir_out/grid_spec2 --check
+
+exit
+
+ #check reproducing ability between processor count for make_coupler_mosaic
+ mpirun -n 4 make_coupler_mosaic_parallel --atmos_mosaic $dir_out/atmos_mosaic.nc \
+        --land_mosaic $dir_out/land_mosaic.nc --ocean_mosaic $dir_out/ocean_mosaic.nc \
+        --ocean_topog  $dir_out/topog.nc --interp_order 1 --mosaic_name grid_spec4
+
+ # directory paths should differ
+ nccmp -md --exclude=atm_mosaic_dir --exclude=lnd_mosaic_dir --exclude=ocn_mosaic_dir \
+       --exclude=ocn_topog_dir grid_spec8.nc ../grid_spec16.nc

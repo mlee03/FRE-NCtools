@@ -1,4 +1,4 @@
-#!/usr/bin/env bats
+#!/usr/bin/bash
 
 #***********************************************************************
 #                   GNU Lesser General Public License
@@ -21,15 +21,17 @@
 #***********************************************************************
 
 # Test grid for multiple same level and telescoping nests
-load test_utils
 
-@test "Test grid for multiple same level and telescoping nests" {
+echo "Test grid for multiple same level and telescoping nests"
+
+out_dir=$PWD/t/Test27-output
+mkdir -p $out_dir
 
 #Make_hgrid: create three same level -level1- nests in tiles 2,5,6"
   make_hgrid \
 		--grid_type gnomonic_ed \
 		--nlon 96 \
-		--grid_name C48_grid \
+		--grid_name $out_dir/C48_grid \
 		--do_schmidt \
 		--stretch_factor 1.0 \
 		--target_lon -97.5 \
@@ -51,7 +53,7 @@ load test_utils
    make_hgrid \
 		--grid_type gnomonic_ed \
 		--nlon 96 \
-		--grid_name C48_grid \
+		--grid_name $out_dir/C48_grid2 \
 		--do_schmidt \
 		--stretch_factor 1.0 \
 		--target_lon -97.5 \
@@ -66,5 +68,3 @@ load test_utils
         --halo 3 \
         --great_circle_algorithm \
         --verbose 1
-
-}

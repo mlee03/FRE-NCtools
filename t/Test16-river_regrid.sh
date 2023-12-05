@@ -1,4 +1,4 @@
-#!/usr/bin/env bats
+#!/usr/bin/bash
 
 #***********************************************************************
 #                   GNU Lesser General Public License
@@ -21,16 +21,21 @@
 #***********************************************************************
 
 # Test river_regrid: remap data from lat-lon onto C48 grid
-load test_utils
 
-@test "Test  remap runoff data from regular lat-lon grid onto cm2m grid" {
+echo "Test  remap runoff data from regular lat-lon grid onto cm2m grid"
 
-  generate_all_from_ncl
+dir_in=$PWD/t/Test16-input
+dir_out=$PWD/t/Test16-output
+
+mkdir -p $dir_out
+
+for ncl_file in $dir_in/*.ncl ; do
+  nc_file=${ncl_file/'.ncl'/'.nc'}
+  ncgen $ncl_file -o $nc_file
+done
 
    river_regrid \
-		--mosaic grid_spec.nc \
-		--river_src z1l_river_output_M45_tripolar_aug24.nc \
-		--output river_data_C48 \
+		--mosaic $dir_in/grid_spec.nc \
+		--river_src $dir_in/z1l_river_output_M45_tripolar_aug24.nc \
+		--output $dir_out/river_data_C48 \
 		--land_thresh 0.000001
-
-}

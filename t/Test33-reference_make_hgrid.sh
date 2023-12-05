@@ -1,4 +1,4 @@
-#!/usr/bin/env bats
+#!/usr/bin/bash
 
 #***********************************************************************
 #                   GNU Lesser General Public License
@@ -20,47 +20,22 @@
 # <http://www.gnu.org/licenses/>.
 #***********************************************************************
 
-load test_utils
+echo "Test make_hgrid do_transform vs. FV3 generated grid spec"
 
-@test "Test make_hgrid do_transform vs. FV3 generated grid spec" {
+dir_in=$PWD/t/Test33-input
+dir_out=$PWD/t/Test33-output
+mkdir -p $dir_out
 
-fv3_grid_name="fv3_48_grid_spec"   #name prefix for the internal fv3 grid spec files.
-nct_ff_grid_name="C48_ff_grid_spec"   #name prefix for NCTools generated files from fv3 files
-nct_grid_name="C48_grid_spec"   #name prefix for "the common analytic" make_hgrid generated files.
-fv3_grids_filelist=""
+gs=$dir_in/"fv3_48_grid_spec.tile"   #name prefix for the internal fv3 grid spec files.
 
-
- if [ ! -d "Test33" ]
-  then
-      mkdir Test33
-  fi
- cd Test33
-
-#0) Verify the existance of the FV3 grid spec files
-for i in 1 2 3 4 5 6
-do
-    fv3_file=$fv3_grid_name".tile"$i".nc"
-   run_and_check [ -e $top_srcdir/t/Test33-reference/$fv3_file ]
-done
-
-cp $top_srcdir/t/Test33-reference/*.nc .
-
-# I) !Make the NCTools grid files.
-#Ia) Prepare a list of FV3 files to pass to make_hgrid. These files
-# can be created from SHiELD/FV3 runs with the do_cube, then (if neccesary)
-# to modify the FV3 files with "ncks --fl_fmt=netcdf4_classic"
-fv3_grids_filelist=$(get_csv_filename_list .  $fv3_grid_name"*.nc")
-
-echo "about to call make_hgrid with file list: "
-echo $fv3_grids_filelist
-echo ""
 #Ib) Call make_hgrid to generate the NCTools grids from FV3 files.
 ## TODO:  Note argument of --great_circle_algorithm option, which should not
 ## be necessary and code may be corrected in future.
 make_hgrid --grid_type from_file \
 	   --great_circle_algorithm \
-	   --my_grid $fv3_grids_filelist \
-	   --grid_name $nct_ff_grid_name
+	   --my_grid $gs"1.nc",$gs"2.nc",$gs"3.nc",$gs"4.nc",$gs"5.nc",$gs"6.nc" \
+	   --grid_name $dir_out/C48_ff_grid_spec
+
 
 #II) "Analytically" create a equal distance gnomonic cubic grid using
 #     the do_cube_transform option
@@ -71,7 +46,7 @@ make_hgrid \
     --stretch_factor 3 \
     --target_lat 17.5 \
     --target_lon 172.5 \
-    --grid_name $nct_grid_name
+    --grid_name $dir_out/C48_grid_spec
 
 
 # III)  Compare the six tile files generated "analytically" to the corresponding ones
@@ -83,11 +58,9 @@ make_hgrid \
 # (e.g. Intel analysis nodes, AMD T5 nodes, various home computers).
 for i in 1 2 3 4 5 6
 do
-    fv3_file=$nct_ff_grid_name".tile"$i".nc"
-    nct_file=$nct_grid_name".tile"$i".nc"
-    run_and_check nccmp -d --variable=x,y,dx,dy --Tolerance=1.0e-9 $fv3_file $nct_file
-    run_and_check nccmp -d --variable=area --Tolerance=1.0e-6 $fv3_file $nct_file
+    fv3_file=$dir_out/"C48_ff_grid_spec.tile"$i".nc"
+    nct_file=$dir_out/"C48_grid_spec.tile"$i".nc"
+    nccmp -d --variable=x,y,dx,dy --Tolerance=1.0e-9 $fv3_file $nct_file
+    nccmp -d --variable=area --Tolerance=1.0e-6 $fv3_file $nct_file
     # TODO: angle_dx and angle_dy may be done in future.
 done
-
-}

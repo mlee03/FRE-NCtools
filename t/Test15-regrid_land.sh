@@ -1,4 +1,4 @@
-#!/usr/bin/env bats
+#!/usr/bin/bash
 
 #***********************************************************************
 #                   GNU Lesser General Public License
@@ -21,51 +21,55 @@
 #***********************************************************************
 
 # Test regrid land data with cell_measures and cell_methods attribute
-load test_utils
 
-@test "Test regrid land data" {
+echo "Test regrid land data"
 
-  generate_all_from_ncl
+dir_in=$PWD/t/Test15-input
+dir_out=$PWD/t/Test15-output
+mkdir -p $dir_out
+
+for ncl_file in $dir_in/*.ncl ; do
+  nc_file=${ncl_file/'.ncl'/'.nc'}
+  ncgen $ncl_file -o $nc_file
+done
 
    fregrid \
-		--input_mosaic C180_mosaic.nc \
+		--input_mosaic $dir_in/C180_mosaic.nc \
 		--interp_method conserve_order1 \
 		--nlon 144 \
 		--nlat 90 \
-		--remap_file remap_file.nc
+		--remap_file $dir_out/remap_file.nc
 
 #remap static field
    fregrid  \
-		--input_mosaic C180_mosaic.nc  \
+		--input_mosaic $dir_in/C180_mosaic.nc  \
 		--interp_method conserve_order1  \
 		--nlon 144  \
 		--nlat 90  \
-		--input_file 00050101.land_static  \
+		--input_file $dir_in/00050101.land_static  \
 		--scalar_field soil_frac,lake_frac,glac_frac,area,soil_area,lake_area,glac_area  \
-		--output_file out.nc  \
-		--remap_file remap_file.nc
+		--output_file $dir_out/out.nc  \
+		--remap_file $dir_out/remap_file.nc
 
 # parallel call
-  if [ -z "$skip_mpi" ]; then
      mpirun -n 4 fregrid_parallel \
-		--input_mosaic C180_mosaic.nc \
+		--input_mosaic $dir_in/C180_mosaic.nc \
 		--interp_method conserve_order1 \
 		--nlon 144 \
 		--nlat 90 \
-		--remap_file remap_file.nc
+		--remap_file $dir_out/remap_file.nc
 
      mpirun -n 4 fregrid_parallel  \
-		--input_mosaic C180_mosaic.nc  \
+		--input_mosaic $dir_in/C180_mosaic.nc  \
 		--interp_method conserve_order1  \
 		--nlon 144  \
 		--nlat 90  \
-		--input_file 00050101.land_static  \
+		--input_file $dir_in/00050101.land_static  \
 		--scalar_field soil_frac,lake_frac,glac_frac,area,soil_area,lake_area,glac_area  \
-		--output_file out_parallel.nc  \
-		--remap_file remap_file.nc
+		--output_file $dir_out/out_parallel.nc  \
+		--remap_file $dir_out/remap_file.nc
 
-    run_and_check nccmp -md out.nc out_parallel.nc
-  fi
+     nccmp -md $dir_out/out.nc $dir_out/out_parallel.nc
 
 # remap other fields
 # Commented this part out because the input file is too large
@@ -78,5 +82,3 @@ load test_utils
 #		--scalar_field evap_land,evap_soil,evap_glac,evap_lake  \
 #		--output_file 00050101.land_month.nc  \
 #		--remap_file remap_file.nc
-
-}

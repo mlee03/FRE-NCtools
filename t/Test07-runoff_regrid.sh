@@ -1,4 +1,4 @@
-#!/usr/bin/env bats
+#!/usr/bin/bash
 
 #***********************************************************************
 #                   GNU Lesser General Public License
@@ -21,22 +21,21 @@
 #***********************************************************************
 
 # Test remap runoff data from regular lat-lon grid onto cm2m grid
-load test_utils
 
-@test "Test remap runoff data from regular lat-lon grid onto cm2m grid" {
+echo "Test remap runoff data from regular lat-lon grid onto cm2m grid"
 
-  runoff_regrid_input
+dir_in=$PWD/t/Test07-input
+dir_out=$PWD/t/Test07-output
+mkdir -p $dir_out;
+
+for ncl_file in $dir_in/*.ncl ; do
+  nc_file=${ncl_file/'.ncl'/'.nc'}
+  ncgen $ncl_file -o $nc_file
+done
 
   runoff_regrid \
-		--input_file runoff.daitren.iaf.nc \
+		--input_file $dir_in/runoff.daitren.iaf.nc \
 		--input_fld_name runoff \
-		--output_mosaic ocean_mosaic.nc \
-		--output_topog topog.nc \
-		--output_file runoff.cm2m.nc
-}
-
-runoff_regrid_input() {
-    generate_all_from_ncl 06
-    generate_all_from_ncl 03
-    generate_all_from_ncl 07
-}
+		--output_mosaic $dir_in/ocean_mosaic.nc \
+		--output_topog $dir_in/topog.nc \
+		--output_file $dir_out/runoff.cm2m.nc
