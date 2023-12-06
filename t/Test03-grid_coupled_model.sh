@@ -72,7 +72,7 @@ cd $dir_out
    mpirun -n 2 make_topog_parallel \
 		--mosaic ocean_mosaic.nc \
 		--topog_type realistic \
-		--topog_file OCCAM_p5degree.nc \
+		--topog_file $dir_in/OCCAM_p5degree.nc \
 		--topog_field TOPO \
 		--scale_factor -1 \
 		--vgrid ocean_vgrid.nc \

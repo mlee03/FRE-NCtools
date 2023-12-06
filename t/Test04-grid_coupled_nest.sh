@@ -29,8 +29,6 @@ dir_out=$PWD/t/Test04-output
 
 cd $dir_out
 
-ncgen $dir_in/OCCAM_p5degree.ncl -o $dir_in/OCCAM_p5degree.nc
-
 #create ocean_hgrid
  make_hgrid \
 		--grid_type tripolar_grid \

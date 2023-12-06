@@ -27,6 +27,7 @@ echo "Test no stretched grid data lats 32.0 34.0 35.4"
 dir_in=$PWD/t/Test32-input
 dir_out=$PWD/t/Test32-output
 mkdir -p $dir_out
+cd $dir_out
 
 #Make no stretched grid
 make_hgrid \
