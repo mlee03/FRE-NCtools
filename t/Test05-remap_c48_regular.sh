@@ -24,7 +24,7 @@ echo "remap data from C48 to regular lat-lon grid"
 
 dir_in=$PWD/t/Test05-input
 dir_out=$PWD/t/Test05-output
-
+mkdir -p $dir_out
 cd $dir_out
 
 fregrid \
