@@ -175,11 +175,12 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 			      lat_out_min_list[0:nx2*ny2], lat_out_max_list[0:nx2*ny2],	\
 			      lon_out_min_list[0:nx2*ny2], lon_out_max_list[0:nx2*ny2],	\
 			      lon_out_avg[0:nx2*ny2], n2_list[0:nx2*ny2],area_out2[0:nx2*ny2]) 
-
+#ifdef _OPENACC
       get_list_inout(nx_out, ny_out, grid_out[n].lonc, grid_out[n].latc,
                    lon_out_min_list, lon_out_max_list,
 		   lat_out_min_list, lat_out_max_list,
                    lon_out_avg, lon_out_list, lat_out_list, area_out2, n2_list);
+#endif
 
       nx_in=grid_in[0].nx;
       ny_in=grid_in[0].ny;
@@ -229,11 +230,13 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 #pragma acc enter data copyin(mask[0:nx_in*ny_in])     
 #pragma acc enter data copyin(grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)], grid_in[m].latc[0:(nx_in+1)*(ny_in+1)])
 	
+#ifdef _OPENACC
 	nxgrid_in = pre_create_xgrid_2dx2d_order2(&nx_in, &ny_now, &nx_out, &ny_out, grid_in[m].lonc+jstart*(nx_in+1),
 						  grid_in[m].latc+jstart*(nx_in+1),  grid_out[n].lonc,  grid_out[n].latc,
 						  mask, lon_out_list, lat_out_list, lat_out_min_list, lat_out_max_list,
 						  lon_out_min_list, lon_out_max_list, lon_out_avg, n2_list, area_out2,
 						  counts_per_ij, ij_start, ij_end);
+#endif
 
 	printf("%d ", nxgrid_in);
 	
@@ -253,13 +256,19 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 	time_nxgrid = (time_end - time_start)/CLOCKS_PER_SEC;
 	printf("time=%f ", time_nxgrid);
 	
-	nxgrid = create_xgrid_2dx2d_order2(&nx_in, &ny_now, &nx_out, &ny_out, &nxgrid_in, 
+#ifdef _OPENACC
+	nxgrid = create_xgrid_2dx2d_order2_gpu(&nx_in, &ny_now, &nx_out, &ny_out, &nxgrid_in, 
 					   grid_in[m].lonc+jstart*(nx_in+1),
 					   grid_in[m].latc+jstart*(nx_in+1),  grid_out[n].lonc,  grid_out[n].latc,
 					   mask, lon_out_list, lat_out_list, lat_out_min_list, lat_out_max_list,
 					   lon_out_min_list, lon_out_max_list, lon_out_avg, n2_list, area_out2, 
 					   counts_per_ij, ij_start, ij_end, i_in, j_in, i_out, j_out, 
 					   xgrid_area, xgrid_clon, xgrid_clat);
+#else
+        nxgrid = create_xgrid_2dx2d_order2_cpu(&nx_in, &ny_now, &nx_out, &ny_out, grid_in[m].lonc+jstart*(nx_in+1),
+					       grid_in[m].latc+jstart*(nx_in+1),  grid_out[n].lonc,  grid_out[n].latc,
+					       mask, i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat);
+#endif
 
 #pragma acc exit data copyout(i_in[0:nxgrid_in], j_in[0:nxgrid_in], i_out[0:nxgrid_in], j_out[0:nxgrid_in], \
 			       xgrid_area[0:nxgrid_in], xgrid_clon[0:nxgrid_in], xgrid_clat[0:nxgrid_in])

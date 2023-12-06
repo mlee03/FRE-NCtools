@@ -873,13 +873,6 @@ nxgrid = 0;
 
 };/* get_xgrid_2Dx2D_order1 */
 
-/********************************************************************************
-  void create_xgrid_2dx1d_order2
-  This routine generate exchange grids between two grids for the second order
-  conservative interpolation. nlon_in,nlat_in,nlon_out,nlat_out are the size of the grid cell
-  and lon_in,lat_in, lon_out,lat_out are geographic grid location of grid cell bounds.
-  mask is on grid lon_in/lat_in.
-********************************************************************************/
 #ifdef _OPENACC
 
 //MKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKL
@@ -1098,7 +1091,7 @@ void get_list_inout( const int nx, const int ny, const double *lon_inout, const 
   }
 }
 
-
+/// Set up for openacc(gpu) variant of create_xgrid_2dx2d_order2
 int pre_create_xgrid_2dx2d_order2(const int *nlon_in, const int *nlat_in, const int *nlon_out, const int *nlat_out,
 				  const double *lon_in, const double *lat_in, const double *lon_out, const double *lat_out,
 				  const double *mask_in,
@@ -1228,7 +1221,15 @@ int pre_create_xgrid_2dx2d_order2(const int *nlon_in, const int *nlat_in, const 
 
 //MKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKLMKL
 
-int create_xgrid_2dx2d_order2(const int *nlon_in, const int *nlat_in, const int *nlon_out, const int *nlat_out, const int *nxgrid_in,
+/********************************************************************************
+  int create_xgrid_2dx1d_order2
+  This routine generate exchange grids between two grids for the second order
+  conservative interpolation. nlon_in,nlat_in,nlon_out,nlat_out are the size of the grid cell
+  and lon_in,lat_in, lon_out,lat_out are geographic grid location of grid cell bounds.
+  mask is on grid lon_in/lat_in.
+  Uses OpenACC gpu-accelerated algorithm
+********************************************************************************/
+int create_xgrid_2dx2d_order2_gpu(const int *nlon_in, const int *nlat_in, const int *nlon_out, const int *nlat_out, const int *nxgrid_in,
 			      const double *lon_in, const double *lat_in, const double *lon_out, const double *lat_out,
 			      const double *mask_in,
 			      const double *lon_out_list, const double *lat_out_list, 
@@ -1364,7 +1365,8 @@ int create_xgrid_2dx2d_order2(const int *nlon_in, const int *nlat_in, const int 
 
 };/* get_xgrid_2Dx2D_order2 */
 #else
-int create_xgrid_2dx2d_order2(const int *nlon_in, const int *nlat_in, const int *nlon_out, const int *nlat_out,
+/// Original openmp accelerated algorithm for creating 2dx2d exchange grid
+int create_xgrid_2dx2d_order2_cpu(const int *nlon_in, const int *nlat_in, const int *nlon_out, const int *nlat_out,
 			      const double *lon_in, const double *lat_in, const double *lon_out, const double *lat_out,
 			      const double *mask_in, int *i_in, int *j_in, int *i_out, int *j_out,
 			      double *xgrid_area, double *xgrid_clon, double *xgrid_clat)
