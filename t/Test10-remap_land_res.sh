@@ -33,13 +33,7 @@ dir_in=$PWD/t/Test10-input/
 dir_out=$PWD/t/Test10-output
 
 mkdir -p $dir_out
-
-for dir in `ls $dir_in` ;do
-  for ncl_file in $dir_in/$dir/*.ncl; do
-    nc_file=${ncl_file/'.ncl'/'.nc'}
-    ncgen $ncl_file -o $nc_file
-  done
-done
+cd $dir_out
 
 remap_land \
 	--file_type land  \
@@ -48,4 +42,4 @@ remap_land \
 	--src_restart $dir_in/src_restart/land.res \
 	--dst_restart $dir_in/land.res \
 	--dst_cold_restart $dir_in/dst_cold_restart/land.res \
-	--remap_file $dir_out/remap_file_C48_to_C192 --print_memory
+	--remap_file remap_file_C48_to_C192 --print_memory

@@ -26,7 +26,8 @@ echo "Test grid for coupled nest model (land are C48 and ocean is 1 degree tripo
 
 dir_in=$PWD/t/Test04-input
 dir_out=$PWD/t/Test04-output
-mkdir -p $dir_out
+
+cd $dir_out
 
 ncgen $dir_in/OCCAM_p5degree.ncl -o $dir_in/OCCAM_p5degree.nc
 
@@ -39,7 +40,7 @@ ncgen $dir_in/OCCAM_p5degree.ncl -o $dir_in/OCCAM_p5degree.nc
 		--ybnd -82,-30,-10,0,10,30,90 \
 		--dlon 1.0,1.0  \
 		--dlat 1.0,1.0,0.6666667,0.3333333,0.6666667,1.0,1.0 \
-		--grid_name $dir_out/ocean_hgrid  \
+		--grid_name ocean_hgrid  \
 		--center c_cell
 
 #create ocean_vgrid
@@ -48,33 +49,31 @@ ncgen $dir_in/OCCAM_p5degree.ncl -o $dir_in/OCCAM_p5degree.nc
 		--bnds 0.,220.,5500.  \
 		--dbnds 10.,10.,367.14286  \
 		--center c_cell  \
-		--grid_name $dir_out/ocean_vgrid
+		--grid_name ocean_vgrid
 
 #create ocean solo mosaic
  make_solo_mosaic  \
 		--num_tiles 1  \
-		--dir $dir_out  \
-		--mosaic_name $dir_out/ocean_mosaic  \
+		--dir ./  \
+		--mosaic_name ocean_mosaic  \
 		--tile_file ocean_hgrid.nc  \
 		--periodx 360
 
 #create ocean topography data
  make_topog  \
-		--mosaic $dir_out/ocean_mosaic.nc  \
+		--mosaic ocean_mosaic.nc  \
 		--topog_type realistic  \
-		--topog_file $dir_in/OCCAM_p5degree.nc \
+		--topog_file OCCAM_p5degree.nc \
 		--topog_field TOPO  \
 		--scale_factor -1  \
-		--vgrid $dir_out/ocean_vgrid.nc  \
+		--vgrid ocean_vgrid.nc  \
 		--output topog.nc
-
- mv topog.nc $dir_out/topog.nc
 
 #Create C48 grid with atmos nested grid.
  make_hgrid  \
 		--grid_type gnomonic_ed  \
 		--nlon 96  \
-		--grid_name $dir_out/atmos_grid  \
+		--grid_name atmos_grid  \
 		--do_schmidt \
 		--target_lat 48.15  \
 		--target_lon -100.15  \
@@ -92,15 +91,15 @@ ncgen $dir_in/OCCAM_p5degree.ncl -o $dir_in/OCCAM_p5degree.nc
 #create C48 solo mosaic for atmos
  make_solo_mosaic  \
 		--num_tiles 7  \
-		--dir $dir_out  \
-		--mosaic $dir_out/atmos_mosaic  \
+		--dir ./  \
+		--mosaic atmos_mosaic  \
 		--tile_file  atmos_grid.tile1.nc,atmos_grid.tile2.nc,atmos_grid.tile3.nc,atmos_grid.tile4.nc,atmos_grid.tile5.nc,atmos_grid.tile6.nc,atmos_grid.tile7.nc
 
 #Create C144 grid for land
  make_hgrid  \
 		--grid_type gnomonic_ed  \
 		--nlon 288  \
-		--grid_name $dir_out/land_grid  \
+		--grid_name land_grid  \
 		--do_schmidt \
 		--target_lat 48.15  \
 		--target_lon -100.15  \
@@ -114,24 +113,24 @@ ncgen $dir_in/OCCAM_p5degree.ncl -o $dir_in/OCCAM_p5degree.nc
 #create C144 solo mosaic for land
  make_solo_mosaic  \
 		--num_tiles 6  \
-		--dir $dir_out  \
-		--mosaic $dir_out/land_mosaic \
+		--dir ./  \
+		--mosaic land_mosaic \
 		--tile_file land_grid.tile1.nc,land_grid.tile2.nc,land_grid.tile3.nc,land_grid.tile4.nc,land_grid.tile5.nc,land_grid.tile6.nc
 
 
 # MPI only
  #make the coupler_mosaic
- mpirun -n 2 make_coupler_mosaic_parallel --atmos_mosaic $dir_out/atmos_mosaic.nc \
-        --land_mosaic $dir_out/land_mosaic.nc --ocean_mosaic $dir_out/ocean_mosaic.nc \
-        --ocean_topog  $dir_out/topog.nc --interp_order 1 --mosaic_name $dir_out/grid_spec2 --check
+ mpirun -n 2 make_coupler_mosaic_parallel --atmos_mosaic atmos_mosaic.nc \
+        --land_mosaic land_mosaic.nc --ocean_mosaic ocean_mosaic.nc \
+        --ocean_topog topog.nc --interp_order 1 --mosaic_name grid_spec2 --check
 
 exit
 
  #check reproducing ability between processor count for make_coupler_mosaic
- mpirun -n 4 make_coupler_mosaic_parallel --atmos_mosaic $dir_out/atmos_mosaic.nc \
-        --land_mosaic $dir_out/land_mosaic.nc --ocean_mosaic $dir_out/ocean_mosaic.nc \
-        --ocean_topog  $dir_out/topog.nc --interp_order 1 --mosaic_name grid_spec4
+ mpirun -n 4 make_coupler_mosaic_parallel --atmos_mosaic atmos_mosaic.nc \
+        --land_mosaic land_mosaic.nc --ocean_mosaic ocean_mosaic.nc \
+        --ocean_topog  topog.nc --interp_order 1 --mosaic_name grid_spec4
 
  # directory paths should differ
- nccmp -md --exclude=atm_mosaic_dir --exclude=lnd_mosaic_dir --exclude=ocn_mosaic_dir \
-       --exclude=ocn_topog_dir grid_spec8.nc ../grid_spec16.nc
+# nccmp -md --exclude=atm_mosaic_dir --exclude=lnd_mosaic_dir --exclude=ocn_mosaic_dir \
+#       --exclude=ocn_topog_dir grid_spec8.nc ../grid_spec16.nc

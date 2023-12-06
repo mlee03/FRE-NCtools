@@ -28,14 +28,11 @@ dir_in=$PWD/t/Test07-input
 dir_out=$PWD/t/Test07-output
 mkdir -p $dir_out;
 
-for ncl_file in $dir_in/*.ncl ; do
-  nc_file=${ncl_file/'.ncl'/'.nc'}
-  ncgen $ncl_file -o $nc_file
-done
+cd $dir_out
 
   runoff_regrid \
 		--input_file $dir_in/runoff.daitren.iaf.nc \
 		--input_fld_name runoff \
 		--output_mosaic $dir_in/ocean_mosaic.nc \
 		--output_topog $dir_in/topog.nc \
-		--output_file $dir_out/runoff.cm2m.nc
+		--output_file runoff.cm2m.nc

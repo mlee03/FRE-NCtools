@@ -25,12 +25,7 @@ echo "remap data from C48 to regular lat-lon grid"
 dir_in=$PWD/t/Test05-input
 dir_out=$PWD/t/Test05-output
 
-mkdir -p $dir_out
-for ncl_file in $dir_in/*.ncl ; do
-  nc_file=${ncl_file/'.ncl'/'.nc'}
-  ncgen $ncl_file -o $nc_file
-done
-
+cd $dir_out
 
 fregrid \
 		--input_mosaic $dir_in/C48_mosaic.nc \
@@ -39,7 +34,7 @@ fregrid \
 		--nlon 144 \
 		--nlat 90 \
 		--interp_method conserve_order2 \
-		--output_dir $dir_out \
+		--output_dir ./ \
 		--output_file 19800101.atmos_daily.nc \
 		--check_conserve \
-		--remap_file $dir_out/C48_to_N45_remap.nc
+		--remap_file C48_to_N45_remap.nc

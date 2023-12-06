@@ -29,10 +29,7 @@ dir_in=$PWD/t/Test13-input
 dir_out=$PWD/t/Test13-output
 mkdir -p $dir_out
 
-for ncl_file in $dir_in/*.ncl ; do
-  nc_file=${ncl_file/'.ncl'/'.nc'}
-  ncgen $ncl_file -o $nc_file
-done
+cd $dir_out
 
 #Make the quick mosaic
    make_quick_mosaic \

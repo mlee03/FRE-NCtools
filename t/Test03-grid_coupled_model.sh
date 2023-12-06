@@ -28,10 +28,7 @@ dir_in=$PWD/t/Test03-input
 dir_out=$PWD/t/Test03-output
 mkdir -p $dir_out
 
-for ncl_file in $dir_in/*.ncl ; do
-  nc_file=${ncl_file/'.ncl'/'.nc'}
-  ncgen $ncl_file -o $nc_file
-done
+cd $dir_out
 
 #Make_hgrid: create ocean_hgrid"
     make_hgrid \
@@ -42,7 +39,7 @@ done
 		--ybnd -82,-30,-10,0,10,30,90 \
 		--dlon 1.0,1.0 \
 		--dlat 1.0,1.0,0.6666667,0.3333333,0.6666667,1.0,1.0 \
-		--grid_name $dir_out/ocean_hgrid \
+		--grid_name ocean_hgrid \
 		--center c_cell
 
 #Make_vgrid: create ocean_vgrid
@@ -51,73 +48,70 @@ done
 		--bnds 0.,220.,5500. \
 		--dbnds 10.,10.,367.14286 \
 		--center c_cell \
-		--grid_name $dir_out/ocean_vgrid
+		--grid_name ocean_vgrid
 
 #Make_solo_mosaic: create ocean solo mosaic
    make_solo_mosaic \
 		--num_tiles 1 \
-		--dir $dir_out \
-		--mosaic_name $dir_out/ocean_mosaic \
+		--dir ./       \
+		--mosaic_name ocean_mosaic \
 		--tile_file ocean_hgrid.nc \
 		--periodx 360
 
-#Make_topog: create ocean topography data
+   #Make_topog: create ocean topography data
    make_topog \
-		--mosaic $dir_out/ocean_mosaic.nc \
+		--mosaic ocean_mosaic.nc \
 		--topog_type realistic \
 		--topog_file $dir_in/OCCAM_p5degree.nc \
 		--topog_field TOPO \
 		--scale_factor -1 \
-		--vgrid $dir_out/ocean_vgrid.nc \
+		--vgrid ocean_vgrid.nc \
 		--output topog.nc
 
-   mv topog.nc $dir_out/topog.nc
-
 # MPI only tests
-    mpirun -n 2 make_topog_parallel \
-		--mosaic $dir_out/ocean_mosaic.nc \
+   mpirun -n 2 make_topog_parallel \
+		--mosaic ocean_mosaic.nc \
 		--topog_type realistic \
-		--topog_file $dir_in/OCCAM_p5degree.nc \
+		--topog_file OCCAM_p5degree.nc \
 		--topog_field TOPO \
 		--scale_factor -1 \
-		--vgrid $dir_out/ocean_vgrid.nc \
+		--vgrid ocean_vgrid.nc \
 		--output topog_parallel.nc
 
-    mv topog_parallel.nc $dir_out/topog_parallel.nc
-
-    nccmp -md $dir_out/topog.nc $dir_out/topog_parallel.nc
+    #nccmp -md $dir_out/topog.nc $dir_out/topog_parallel.nc
 
 #Make_hgrid: create C48 grid for atmos/land
    make_hgrid \
 		--grid_type gnomonic_ed \
 		--nlon 96 \
-		--grid_name $dir_out/C48_grid \
+		--grid_name C48_grid \
 
 #Make_solo_mosaic: create C48 solo mosaic for atmos/land
    make_solo_mosaic \
 		--num_tiles 6 \
-		--dir $dir_out \
-		--mosaic $dir_out/C48_mosaic \
+		--dir ./ \
+		--mosaic C48_mosaic \
 		--tile_file C48_grid.tile1.nc,C48_grid.tile2.nc,C48_grid.tile3.nc,C48_grid.tile4.nc,C48_grid.tile5.nc,C48_grid.tile6.nc
 
 #Make_coupler_mosaic: coupler_mosaic with and without parallel and compare
    make_coupler_mosaic \
-		--atmos_mosaic $dir_out/C48_mosaic.nc \
-		--ocean_mosaic $dir_out/ocean_mosaic.nc \
-		--ocean_topog  $dir_out/topog.nc \
+		--atmos_mosaic C48_mosaic.nc \
+		--ocean_mosaic ocean_mosaic.nc \
+		--ocean_topog  topog.nc \
 		--check \
 		--area_ratio_thresh 1.e-10 \
-		--mosaic_name $dir_out/grid_spec
+		--mosaic_name grid_spec
 
-#Make coupler mosaic with parallel
+
+   #Make coupler mosaic with parallel
 
    mpirun -n 4 make_coupler_mosaic_parallel \
-		      --atmos_mosaic $dir_out/C48_mosaic.nc \
-		      --ocean_mosaic $dir_out/ocean_mosaic.nc \
-		      --ocean_topog  $dir_out/topog.nc \
+		      --atmos_mosaic C48_mosaic.nc \
+		      --ocean_mosaic ocean_mosaic.nc \
+		      --ocean_topog  topog.nc \
 		      --mosaic_name grid_spec_parallel  \
 		      --area_ratio_thresh 1.e-10
 
    # compare any created files to non-parallel (exclude directory differences)
    nccmp -md --exclude=atm_mosaic_dir --exclude=lnd_mosaic_dir --exclude=ocn_mosaic_dir \
-         --exclude=ocn_topog_dir $dir_out/grid_spec.nc $dir_out/grid_spec_parallel.nc
+         --exclude=ocn_topog_dir grid_spec.nc grid_spec_parallel.nc

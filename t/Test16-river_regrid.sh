@@ -28,14 +28,10 @@ dir_in=$PWD/t/Test16-input
 dir_out=$PWD/t/Test16-output
 
 mkdir -p $dir_out
-
-for ncl_file in $dir_in/*.ncl ; do
-  nc_file=${ncl_file/'.ncl'/'.nc'}
-  ncgen $ncl_file -o $nc_file
-done
+cd $dir_out
 
    river_regrid \
 		--mosaic $dir_in/grid_spec.nc \
 		--river_src $dir_in/z1l_river_output_M45_tripolar_aug24.nc \
-		--output $dir_out/river_data_C48 \
+		--output river_data_C48 \
 		--land_thresh 0.000001

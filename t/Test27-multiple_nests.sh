@@ -26,12 +26,14 @@ echo "Test grid for multiple same level and telescoping nests"
 
 out_dir=$PWD/t/Test27-output
 mkdir -p $out_dir
+cd $out_dir
+
 
 #Make_hgrid: create three same level -level1- nests in tiles 2,5,6"
   make_hgrid \
 		--grid_type gnomonic_ed \
 		--nlon 96 \
-		--grid_name $out_dir/C48_grid \
+		--grid_name C48_grid \
 		--do_schmidt \
 		--stretch_factor 1.0 \
 		--target_lon -97.5 \
@@ -53,7 +55,7 @@ mkdir -p $out_dir
    make_hgrid \
 		--grid_type gnomonic_ed \
 		--nlon 96 \
-		--grid_name $out_dir/C48_grid2 \
+		--grid_name C48_grid2 \
 		--do_schmidt \
 		--stretch_factor 1.0 \
 		--target_lon -97.5 \
