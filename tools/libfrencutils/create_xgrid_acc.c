@@ -58,6 +58,7 @@ int prepare_create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in
 
 #pragma acc data present(lon_out[0:(nx2+1)*(ny2+1)], lat_out[0:(nx2+1)*(ny2+1)])
 #pragma acc data present(lon_in[0:(nx1+1)*(ny1+1)], lat_in[0:(nx1+1)*(ny1+1)], mask_in[0:nx1*ny1])
+#pragma acc data present(out_minmaxavg_lists)
 #pragma acc data present(out_minmaxavg_lists->lon_list[0:MAX_V*nx2*ny2], out_minmaxavg_lists->lat_list[0:MAX_V*nx2*ny2])
 #pragma acc data present(out_minmaxavg_lists->n_list[0:nx2*ny2], out_minmaxavg_lists->lon_avg[0:nx2*ny2])
 #pragma acc data present(out_minmaxavg_lists->lat_min_list[0:nx2*ny2], out_minmaxavg_lists->lat_max_list[0:nx2*ny2])
@@ -199,6 +200,7 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
 
 #pragma acc data present(lon_out[0:(nx2+1)*(ny2+1)], lat_out[0:(nx2+1)*(ny2+1)])
 #pragma acc data present(lon_in[0:(nx1+1)*(ny1+1)], lat_in[0:(nx1+1)*(ny1+1)], mask_in[0:nx1*ny1])
+#pragma acc data present(out_minmaxavg_lists)
 #pragma acc data present(out_minmaxavg_lists->lon_list[0:MAX_V*nx2*ny2], out_minmaxavg_lists->lat_list[0:MAX_V*nx2*ny2])
 #pragma acc data present(out_minmaxavg_lists->n_list[0:nx2*ny2], out_minmaxavg_lists->lon_avg[0:nx2*ny2])
 #pragma acc data present(out_minmaxavg_lists->lat_min_list[0:nx2*ny2], out_minmaxavg_lists->lat_max_list[0:nx2*ny2])
@@ -328,6 +330,14 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
      ixgrid2++;
    }
  }
+
+ free(i_in2);
+ free(j_in2);
+ free(i_out2);
+ free(j_out2);
+ free(xgrid_area2);
+ free(xgrid_clon2);
+ free(xgrid_clat2);
 
   return nxgrid;
 

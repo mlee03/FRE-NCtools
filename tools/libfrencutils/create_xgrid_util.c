@@ -107,6 +107,7 @@ void get_minmaxavg_lists(const int nx, const int ny, const double *lon, const do
   nyp = ny+1;
 
 #pragma acc data present(lon[0:nxp*nyp], lat[0:nxp*nyp])
+#pragma acc data present(minmaxavg_lists)
 #pragma acc data present(minmaxavg_lists->lon_list[0:MAX_V*nx*ny], minmaxavg_lists->lat_list[0:MAX_V*nx*ny])
 #pragma acc data present(minmaxavg_lists->n_list[0:nx*ny], minmaxavg_lists->lon_avg[0:nx*ny])
 #pragma acc data present(minmaxavg_lists->lat_min_list[0:nx*ny], minmaxavg_lists->lat_max_list[0:nx*ny])
