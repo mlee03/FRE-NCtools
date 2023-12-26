@@ -21,12 +21,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <netcdf.h>
+#include <math.h>
 #include "constant.h"
 #include "globals.h"
 #include "mpp.h"
 #include "mpp_io.h"
 #include "read_mosaic.h"
 #include "mosaic_util.h"
+#include "create_xgrid_util.h"
 #include "conserve_interp_util.h"
 
 #define  AREA_RATIO (1.e-3)
@@ -350,12 +352,12 @@ void get_interp_dij(const int ntiles_in, const int ntiles_out,
   }
 
   /* free the memory */
-  for(n=0; n<ntiles_in; n++) {
-    free(cell_in[n].area);
-    free(cell_in[n].clon);
-    free(cell_in[n].clat);
-  }
-  free(cell_in);
+  //for(n=0; n<ntiles_in; n++) {
+  //  free(cell_in[n].area);
+  //  free(cell_in[n].clon);
+  //  free(cell_in[n].clat);
+  //}
+  //free(cell_in);
 
 
 }
