@@ -1136,7 +1136,8 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   nxgrid = create_xgrid_2dx2d_order2_acc(&nx_in, &ny_now, &nx_out, &ny_out, grid_in[m].lonc+jstart*(nx_in+1),
                                          grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc,
                                          out_minmaxavg_lists, mask, approx_nxgrid, counts_per_ij1, ij2_start, ij2_end,
-                                         tmp_interp+m, &xgrid_area, &xgrid_clon, &xgrid_clat, cell_in+m);
+                                         &i_in, &j_in, &i_out, &j_out,
+                                         &xgrid_area, &xgrid_clon, &xgrid_clat, cell_in+m);
 
 #pragma acc exit data copyout(cell_in[m].area[0:nx_in*ny_in],      \
                               cell_in[m].clon[0:nx_in*ny_in],      \
