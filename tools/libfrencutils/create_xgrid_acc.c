@@ -159,7 +159,8 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
                                   Minmaxavg_lists *out_minmaxavg_lists, const double *mask_in, const int approx_nxgrid,
                                   const int *counts_per_ij1, const int *ij2_start, const int *ij2_end,
                                   int **i_in, int **j_in, int **i_out, int **j_out,
-                                  double **xgrid_area, double **xgrid_clon, double **xgrid_clat, CellStruct *cell_in_m)
+                                  double **xgrid_area, double **xgrid_clon, double **xgrid_clat, CellStruct *cell_in_m,
+                                  const int jstart)
 {
 
 #define MAX_V 8
@@ -229,6 +230,7 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
       double x1_in[MV], y1_in[MV];
 
       double cell_in_area, cell_in_clon, cell_in_clat;
+      int ij1_jstart;
 
       i1 = ij1%nx1;
       j1 = ij1/nx1;
@@ -307,7 +309,7 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
             cell_in_clon += xgrid_clon2[ij1_start+ixgrid];
             cell_in_clat += xgrid_clat2[ij1_start+ixgrid];
             i_in2[ij1_start+ixgrid] = i1;
-            j_in2[ij1_start+ixgrid] = j1;
+            j_in2[ij1_start+ixgrid] = j1+jstart;
             i_out2[ij1_start+ixgrid] = i2;
             j_out2[ij1_start+ixgrid] = j2;
             ixgrid++;
@@ -315,9 +317,10 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
           } //if
         } //if
       } //ij2
-    cellm_area[ij1] = cell_in_area;
-    cellm_clon[ij1] = cell_in_clon;
-    cellm_clat[ij1] = cell_in_clat;
+      ij1_jstart=(j1+jstart)*nx1+i1;
+      cellm_area[ij1_jstart] = cell_in_area;
+      cellm_clon[ij1_jstart] = cell_in_clon;
+      cellm_clat[ij1_jstart] = cell_in_clat;
     } //mask
   } //ij1
 } //kernel

@@ -32,5 +32,5 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
             Minmaxavg_lists *out_minmaxavg_lists, const double *mask_in, const int approx_nxgrid,
             const int *counts_per_ij1, const int *ij2_start, const int *ij2_end,
             int **i_in, int **j_in, int **i_out, int **j_out,
-            double **xgrid_area, double **xgrid_clon, double **xgrid_clat, CellStruct *cell_in_m);
+            double **xgrid_area, double **xgrid_clon, double **xgrid_clat, CellStruct *cell_in_m, const int jstart);
 #endif

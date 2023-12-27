@@ -1137,7 +1137,7 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
                                          grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc,
                                          out_minmaxavg_lists, mask, approx_nxgrid, counts_per_ij1, ij2_start, ij2_end,
                                          &i_in, &j_in, &i_out, &j_out,
-                                         &xgrid_area, &xgrid_clon, &xgrid_clat, cell_in+m);
+                                         &xgrid_area, &xgrid_clon, &xgrid_clat, cell_in+m, jstart);
 
 #pragma acc exit data copyout(cell_in[m].area[0:nx_in*ny_in],      \
                               cell_in[m].clon[0:nx_in*ny_in],      \
@@ -1150,6 +1150,7 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
                                      grid_in[m].latc+jstart*(nx_in+1),  grid_out[n].lonc,  grid_out[n].latc,
                                      mask, i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat);
 
+  for(int i=0; i<nxgrid; i++) j_in[i] += jstart;
   get_CellStruct(m, nx_in, nxgrid, i_in, j_in, xgrid_area, xgrid_clon, xgrid_clat, cell_in);
 
 #endif
@@ -1157,8 +1158,6 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   if(DEBUG) printf("nxgrid, m, & n is: %d %d %d\n",nxgrid, m, n);
   time_end = clock();
   time_nxgrid += 1.0 * (time_end - time_start)/CLOCKS_PER_SEC;
-
-  for(int i=0; i<nxgrid; i++) j_in[i] += jstart;
 
   /* For the purpose of bitiwise reproducing, the following operation is needed. */
   get_interp( opcode, nxgrid, interp, m, n, i_in, j_in, i_out, j_out,
