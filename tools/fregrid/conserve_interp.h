@@ -37,7 +37,7 @@ void do_create_xgrid_order1( const int n, const int m,
                              Interp_config *interp, unsigned int opcode ) ;
 void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
                              Minmaxavg_lists *out_minmaxavg_lists, CellStruct *cell_in, Interp_config *interp,
-                             unsigned int opcode ) ;
+                             Interp_config *tmp_interp, unsigned int opcode ) ;
 void do_great_circle( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
                       Interp_config *interp, unsigned int opcode);
 

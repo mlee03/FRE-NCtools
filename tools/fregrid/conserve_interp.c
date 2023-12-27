@@ -53,6 +53,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   int mxxgrid, zero=0;
 
   CellStruct *cell_in;
+  Interp_config *tmp_interp;
 
   double time_nxgrid=0;
   clock_t time_start, time_end;
@@ -80,6 +81,9 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
       cell_in[m].area = (double *)calloc(nx_in*ny_in,sizeof(double));
       cell_in[m].clon = (double *)calloc(nx_in*ny_in,sizeof(double));
       cell_in[m].clat = (double *)calloc(nx_in*ny_in,sizeof(double));
+#pragma acc enter data copyin(cell_in[m].area[0:nx_in*ny_in], \
+                              cell_in[m].clon[0:nx_in*ny_in], \
+                              cell_in[m].clat[0:nx_in*ny_in])
     }
 
     //START NTILES_OUT
@@ -88,6 +92,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
       nx_out = grid_out[n].nxc;
       ny_out = grid_out[n].nyc;
       interp[n].nxgrid = 0;
+      tmp_interp    = (Interp_config *)malloc(ntiles_in*sizeof(Interp_config));
 
 #pragma acc enter data copyin(grid_out[n].lonc[0:(nx_out+1)*(ny_out+1)], \
                               grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
@@ -124,7 +129,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
             do_create_xgrid_order1(n, m, grid_in, grid_out, interp, opcode);
           }
           else if(opcode & CONSERVE_ORDER2) {
-            do_create_xgrid_order2(n, m, grid_in, grid_out, &out_minmaxavg_lists, cell_in, interp, opcode);
+            do_create_xgrid_order2(n, m, grid_in, grid_out, &out_minmaxavg_lists, cell_in, interp, tmp_interp, opcode);
           }
           else
             mpp_error("conserve_interp: interp_method should be CONSERVE_ORDER1 or CONSERVE_ORDER2");
@@ -770,13 +775,6 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
             tmp_missing_out[n] += 1;
           } //if missing
         } //nxgrid
-#pragma acc exit data delete(pdata_in[0:(nx1+2*halo)*(ny1+2*halo)*nz],  \
-                             pgrad_x[0:nx1*ny1*nz],                     \
-                             pgrad_y[0:nx1*ny1*nz],                     \
-                             pfieldin_area[0:nx1*ny1],                  \
-                             pgridin_area[0:nx1*ny1])
-#pragma acc exit data delete(pweight[0:nx1*ny1])
-
       }//itile
     }//if
     else {
@@ -796,8 +794,8 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 #pragma acc data present( pt_in[0:nxgrid], parea[0:nxgrid], pdata_out[0:nx2*ny2*nz] )
 #pragma acc data present( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz] )
 #pragma acc data present( tmp_data_out[0:nxgrid], tmp_missing_out[0:nxgrid], tmp_area_out[0:nxgrid])
-#pragma acc enter data copyin( pdata_in[0:(nx1+2*halo)*(ny1+2*halo)*nz], pgrad_x[0:nx1*ny1*nz], pgrad_y[0:nx1*ny1*nz])
-#pragma acc enter data copyin( pweight[0:nx1*ny1])
+#pragma acc data copyin( pdata_in[0:(nx1+2*halo)*(ny1+2*halo)*nz], pgrad_x[0:nx1*ny1*nz], pgrad_y[0:nx1*ny1*nz])
+#pragma acc data copyin( pweight[0:nx1*ny1])
 #pragma acc data copyin( pfieldin_area[0:nx1*ny1], pgridin_area[0:nx1*ny1])
 #pragma acc parallel loop
         for(n=0; n<nxgrid; n++) {
@@ -828,12 +826,6 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
             tmp_missing_out[n] = 1;
           } //for kz
         } // nxgrd
-#pragma acc exit data delete(pdata_in[0:(nx1+2*halo)*(ny1+2*halo)*nz],  \
-                             pgrad_x[0:nx1*ny1*nz],                     \
-                             pgrad_y[0:nx1*ny1*nz],                     \
-                             pfieldin_area[0:nx1*ny1],                  \
-                             pgridin_area[0:nx1*ny1])
-#pragma acc exit data delete(pweight[0:nx1*ny1])
       } //itile
     } //if
 
@@ -1097,7 +1089,7 @@ void do_create_xgrid_order1( const int n, const int m,
 
 void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
                              Minmaxavg_lists *out_minmaxavg_lists, CellStruct *cell_in, Interp_config *interp,
-                             unsigned int opcode )
+                             Interp_config *tmp_interp, unsigned int opcode )
 {
 
   int    *i_in=NULL, *j_in=NULL, *i_out=NULL, *j_out=NULL ;
@@ -1144,7 +1136,11 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   nxgrid = create_xgrid_2dx2d_order2_acc(&nx_in, &ny_now, &nx_out, &ny_out, grid_in[m].lonc+jstart*(nx_in+1),
                                          grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc,
                                          out_minmaxavg_lists, mask, approx_nxgrid, counts_per_ij1, ij2_start, ij2_end,
-                                         &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon, &xgrid_clat);
+                                         tmp_interp+m, &xgrid_area, &xgrid_clon, &xgrid_clat, cell_in+m);
+
+#pragma acc exit data copyout(cell_in[m].area[0:nx_in*ny_in],      \
+                              cell_in[m].clon[0:nx_in*ny_in],      \
+                              cell_in[m].clat[0:nx_in*ny_in])
 #else
 
   malloc_xgrid_arrays(get_maxxgrid(), &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon , &xgrid_clat);
@@ -1153,8 +1149,9 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
                                      grid_in[m].latc+jstart*(nx_in+1),  grid_out[n].lonc,  grid_out[n].latc,
                                      mask, i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat);
 
-#endif
+  get_CellStruct(m, nx_in, nxgrid, i_in, j_in, xgrid_area, xgrid_clon, xgrid_clat, cell_in);
 
+#endif
 
   if(DEBUG) printf("nxgrid, m, & n is: %d %d %d\n",nxgrid, m, n);
   time_end = clock();
@@ -1163,7 +1160,6 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   for(int i=0; i<nxgrid; i++) j_in[i] += jstart;
 
   /* For the purpose of bitiwise reproducing, the following operation is needed. */
-  get_CellStruct(m, nx_in, nxgrid, i_in, j_in, xgrid_area, xgrid_clon, xgrid_clat, cell_in);
   get_interp( opcode, nxgrid, interp, m, n, i_in, j_in, i_out, j_out,
               xgrid_clon, xgrid_clat, xgrid_area );
 
