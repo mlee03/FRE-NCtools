@@ -1206,7 +1206,7 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
 
 #pragma acc enter data copyin(grid_in[m].latc[0:(nx_in+1)*(ny_in+1)], \
   grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)], mask[0:nx_in*ny_in],\
-                              grid_in[m].cell_area[0:nx_in*ny_in]))
+                              grid_in[m].cell_area[0:nx_in*ny_in])
 
 
 #ifdef _OPENACC
@@ -1228,9 +1228,9 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
                                          &xgrid_area, &xgrid_clon, &xgrid_clat, cell_in+m, jstart, m);
   interp[n].nxgrid += nxgrid;
 
-#pragma acc exit data copyout(cell_in[m].area[0:nx1*ny1], \
-                              cell_in[m].clon[0:nx1*ny1], \
-                              cell_in[m].clat[0:nx1*ny1])
+#pragma acc exit data copyout(cell_in[m].area[0:nx_in*ny_in], \
+                              cell_in[m].clon[0:nx_in*ny_in], \
+                              cell_in[m].clat[0:nx_in*ny_in])
 
 
 #pragma acc exit data delete(counts_per_ij1[0:nx_in*ny_in], \
