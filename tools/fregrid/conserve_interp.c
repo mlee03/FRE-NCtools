@@ -1220,7 +1220,7 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
                                                  grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc,
                                                  out_minmaxavg_lists, mask, counts_per_ij1, ij2_start, ij2_end );
 
-  nxgrid = create_xgrid_2dx2d_order2_acc(&nx_in, &ny_now, &nx_out, &ny_out, grid_in[m].cell_area+jstart*(nx_in+1),
+  nxgrid = create_xgrid_2dx2d_order2_acc(&nx_in, &ny_now, &nx_out, &ny_out,
                                          grid_in[m].lonc+jstart*(nx_in+1), grid_in[m].latc+jstart*(nx_in+1),
                                          grid_out[n].lonc, grid_out[n].latc,
                                          out_minmaxavg_lists, mask, approx_nxgrid, counts_per_ij1, ij2_start, ij2_end,
@@ -1262,7 +1262,8 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   time_nxgrid += 1.0 * (time_end - time_start)/CLOCKS_PER_SEC;
 
 #pragma acc exit data delete(grid_in[m].latc[0:(nx_in+1)*(ny_in+1)],    \
-                             grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)], mask[0:nx_in*ny_in])
+                             grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)], mask[0:nx_in*ny_in], \
+                             grid_in[m].cell_area[0:nx_in*ny_in])
   malloc_xgrid_arrays(zero, &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon , &xgrid_clat);
   free(mask);
 

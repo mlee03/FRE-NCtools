@@ -155,8 +155,7 @@ int prepare_create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in
   create_xgrid_2dx2d_order2 OPENACC version
 *******************************************************************************/
 int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const int *nlon_out, const int *nlat_out,
-                                  const double *cell_area, const double *lon_in, const double *lat_in,
-                                  const double *lon_out, const double *lat_out,
+                                  const double *lon_in, const double *lat_in, const double *lon_out, const double *lat_out,
                                   Minmaxavg_lists *out_minmaxavg_lists, const double *mask_in, const int approx_nxgrid,
                                   const int *counts_per_ij1, const int *ij2_start, const int *ij2_end,
                                   Interp_config *tmp_interp, int **i_in, int **j_in, int **i_out, int **j_out,
@@ -210,7 +209,6 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
 #pragma acc enter data copyin(i_in2[0:approx_nxgrid])
 #pragma acc enter data copyin(approx_nxgrid)
 #pragma acc data present(lon_out[0:(nx2+1)*(ny2+1)], lat_out[0:(nx2+1)*(ny2+1)])
-#pragma acc data present(cell_area[0:nx1*ny1])
 #pragma acc data present(lon_in[0:(nx1+1)*(ny1+1)], lat_in[0:(nx1+1)*(ny1+1)], mask_in[0:nx1*ny1])
 #pragma acc data present(cellm_area[0:nx1*ny1], cellm_clon[0:nx1*ny1], cellm_clat[0:nx1*ny1])
 #pragma acc data present(xgrid_area2[0:approx_nxgrid], xgrid_clon2[0:approx_nxgrid], xgrid_clat2[0:approx_nxgrid], \
@@ -325,11 +323,6 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
           } //if
         } //if
       } //ij2
-
-      if( cell_in_area < 0 ) {
-        clon = poly_ctrlon(x1_in, y1_in, n1_in, lon_in_avg);
-        clat = poly_ctrlat(x1_in, y1_in, n1_in );
-      }
       ij1_jstart=(j1+jstart)*nx1+i1;
       cellm_area[ij1_jstart] = cell_in_area;
       cellm_clon[ij1_jstart] = cell_in_clon;
