@@ -352,12 +352,73 @@ void get_interp_dij(const int ntiles_in, const int ntiles_out,
   }
 
   /* free the memory */
-  //for(n=0; n<ntiles_in; n++) {
-  //  free(cell_in[n].area);
-  //  free(cell_in[n].clon);
-  //  free(cell_in[n].clat);
-  //}
-  //free(cell_in);
+  for(n=0; n<ntiles_in; n++) {
+    free(cell_in[n].area);
+    free(cell_in[n].clon);
+    free(cell_in[n].clat);
+  }
+  free(cell_in);
+
+
+}
+/*******************************************************************************
+  void get_interp_dij_acc
+********************************************************************************/
+void get_interp_dij_acc(const int ntiles_in, const int ntiles_out,
+                    const Grid_config *grid_in, CellStruct *cell_in, Interp_config *interp)
+{
+
+  int nx_in, ny_in;
+  double x1_in[50], y1_in[50], lon_in_avg, clon, clat;
+  int    i, ii, j, n, n0, n1, n2, n3, n1_in, tile;
+
+  for(n=0 ; n<ntiles_in; n++) {
+
+    /* calcualte cell area */
+    nx_in = grid_in[n].nx;
+    ny_in = grid_in[n].ny;
+    for(j=0; j<ny_in; j++) {
+      for(i=0; i<nx_in; i++) {
+        ii = j*nx_in + i;
+        if(cell_in[n].area[ii] > 0) {
+          if( fabs(cell_in[n].area[ii]-grid_in[n].cell_area[ii])/grid_in[n].cell_area[ii] < AREA_RATIO ) {
+            cell_in[n].clon[ii] /= cell_in[n].area[ii];
+            cell_in[n].clat[ii] /= cell_in[n].area[ii];
+          }
+          else {
+            n0 = j*(nx_in+1)+i;       n1 = j*(nx_in+1)+i+1;
+            n2 = (j+1)*(nx_in+1)+i+1; n3 = (j+1)*(nx_in+1)+i;
+            x1_in[0] = grid_in[n].lonc[n0]; y1_in[0] = grid_in[n].latc[n0];
+            x1_in[1] = grid_in[n].lonc[n1]; y1_in[1] = grid_in[n].latc[n1];
+            x1_in[2] = grid_in[n].lonc[n2]; y1_in[2] = grid_in[n].latc[n2];
+            x1_in[3] = grid_in[n].lonc[n3]; y1_in[3] = grid_in[n].latc[n3];
+            n1_in = fix_lon(x1_in, y1_in, 4, M_PI);
+            lon_in_avg = avgval_double(n1_in, x1_in);
+            clon = poly_ctrlon(x1_in, y1_in, n1_in, lon_in_avg);
+            clat = poly_ctrlat (x1_in, y1_in, n1_in );
+            cell_in[n].clon[ii] = clon/grid_in[n].cell_area[ii];
+            cell_in[n].clat[ii] = clat/grid_in[n].cell_area[ii];
+          }
+        }
+      }
+    }
+  }
+  for(n=0; n<ntiles_out; n++) {
+    for(i=0; i<interp[n].nxgrid; i++) {
+      tile = interp[n].t_in[i];
+      ii   = interp[n].j_in[i] * grid_in[tile].nx + interp[n].i_in[i];
+      interp[n].di_in[i] -= cell_in[tile].clon[ii];
+      interp[n].dj_in[i] -= cell_in[tile].clat[ii];
+    }
+  }
+
+  /* free the memory */
+  for(n=0; n<ntiles_in; n++) {
+    free(cell_in[n].area);
+    free(cell_in[n].clon);
+    free(cell_in[n].clat);
+  }
+  free(cell_in);
 
 
 }
