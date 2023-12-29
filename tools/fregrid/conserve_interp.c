@@ -75,25 +75,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   }
   else {
 
-    //only needed for order2?
-    cell_in    = (CellStruct *)malloc(ntiles_in * sizeof(CellStruct));
-    for(m=0; m<ntiles_in; m++) {
-      double *cellm_area, *cellm_clon, *cellm_clat;
-      CellStruct *cellm;
-      nx_in = grid_in[m].nx;
-      ny_in = grid_in[m].ny;
-      cell_in[m].area = (double *)calloc(nx_in*ny_in,sizeof(double));
-      cell_in[m].clon = (double *)calloc(nx_in*ny_in,sizeof(double));
-      cell_in[m].clat = (double *)calloc(nx_in*ny_in,sizeof(double));
-      cellm = cell_in+m;
-      cellm_area = cell_in[m].area;
-      cellm_clon = cell_in[m].clon;
-      cellm_clat = cell_in[m].clat;
-#pragma acc enter data create(cellm)
-#pragma acc enter data copyin(cellm_area[0:nx_in*ny_in], \
-                              cellm_clon[0:nx_in*ny_in], \
-                              cellm_clat[0:nx_in*ny_in])
-    }
+    if(opcode & CONSERVE_ORDER2) cell_in  = (CellStruct *)malloc(ntiles_in * sizeof(CellStruct));
 
     //START NTILES_OUT
     for(n=0; n<ntiles_out; n++) {
@@ -1211,6 +1193,7 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   clock_t time_start, time_end, time_nxgrid;
 
   int *counts_per_ij1=NULL, *ij2_start=NULL, *ij2_end=NULL;
+  CellStruct *pcellin;
 
   time_start = clock();
 
@@ -1218,6 +1201,16 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   ny_out = grid_out[n].nyc;
   nx_in = grid_in[m].nx;
   ny_in = grid_in[m].ny;
+
+  pcellin = cell_in+m;
+  cell_in[m].area = (double *)calloc(nx_in*ny_in,sizeof(double));
+  cell_in[m].clon = (double *)calloc(nx_in*ny_in,sizeof(double));
+  cell_in[m].clat = (double *)calloc(nx_in*ny_in,sizeof(double));
+#pragma acc enter data copyin(pcellin)
+#pragma acc enter data copyin(cell_in[m].area[0:nx_in*ny_in], \
+                              cell_in[m].clon[0:nx_in*ny_in], \
+                              cell_in[m].clat[0:nx_in*ny_in])
+
 
   get_jstart_jend( nx_out, ny_out, nx_in, ny_in,
                    grid_out[n].latc, grid_in[m].latc, &jstart, &jend, &ny_now);
