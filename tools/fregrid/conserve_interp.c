@@ -58,7 +58,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   double time_nxgrid=0;
   clock_t time_start, time_end;
 
-#ifdef _OPENACC
+  //#ifdef _OPENACC
   Minmaxavg_lists out_minmaxavg_lists;
   out_minmaxavg_lists.lon_list=NULL;
   out_minmaxavg_lists.lat_list=NULL;
@@ -68,7 +68,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   out_minmaxavg_lists.lat_max_list=NULL;
   out_minmaxavg_lists.n_list=NULL;
   out_minmaxavg_lists.lon_avg=NULL;
-#endif
+  //#endif
 
   if( opcode & READ) {
     read_remap_file(ntiles_in,ntiles_out, grid_out, interp, opcode);
