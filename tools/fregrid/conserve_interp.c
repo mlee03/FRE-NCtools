@@ -76,14 +76,21 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
     //only needed for order2?
     cell_in    = (CellStruct *)malloc(ntiles_in * sizeof(CellStruct));
     for(m=0; m<ntiles_in; m++) {
+      double *cellm_area, *cellm_clon, *cellm_clat;
+      CellStruct *cellm;
       nx_in = grid_in[m].nx;
       ny_in = grid_in[m].ny;
       cell_in[m].area = (double *)calloc(nx_in*ny_in,sizeof(double));
       cell_in[m].clon = (double *)calloc(nx_in*ny_in,sizeof(double));
       cell_in[m].clat = (double *)calloc(nx_in*ny_in,sizeof(double));
-#pragma acc enter data copyin(cell_in[m].area[0:nx_in*ny_in], \
-                              cell_in[m].clon[0:nx_in*ny_in], \
-                              cell_in[m].clat[0:nx_in*ny_in])
+      cellm = cell_in+m;
+      cellm_area = cell_in[m].area;
+      cellm_clon = cell_in[m].clon;
+      cellm_clat = cell_in[m].clat;
+#pragma acc enter data create(cellm)
+#pragma acc enter data copyin(cellm_area[0:nx_in*ny_in], \
+                              cellm_clon[0:nx_in*ny_in], \
+                              cellm_clat[0:nx_in*ny_in])
     }
 
     //START NTILES_OUT
@@ -185,6 +192,9 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
         double *area2, *di_in2, *dj_in2;
         Interp_config *pinterp2;
 
+        double *cellm_area, *cellm_clon, *cellm_clat;
+        CellStruct *cellm;
+
         for( int mm=0 ; mm<m; mm++) start+=tmp_interp[mm].nxgrid;
 
         pinterp2 = tmp_interp+m;
@@ -197,32 +207,46 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
         di_in2 = tmp_interp[m].di_in;
         dj_in2 = tmp_interp[m].dj_in;
         tmp_nxgrid = tmp_interp[m].nxgrid ;
+
+        cellm = cell_in+m;
+        cellm_area = cell_in[m].area;
+        cellm_clon = cell_in[m].clon;
+        cellm_clat = cell_in[m].clat;
 #pragma acc data present(pinterp2)
 #pragma acc data present(i_in2[0:tmp_nxgrid], j_in2[0:tmp_nxgrid],   \
                          i_out2[0:tmp_nxgrid], j_out2[0:tmp_nxgrid], \
                          area2[0:tmp_nxgrid], di_in2[0:tmp_nxgrid], \
                          dj_in2[0:tmp_nxgrid], t_in2[0:tmp_nxgrid])
 #pragma acc data present(pinterp)
+#pragma acc data present(cellm)
+#pragma acc data present(cellm_area[0:nx_in*ny_in],   \
+                         cellm_clon[0:nx_in*ny_in],   \
+                         cellm_clat[0:nx_in*ny_in])
 #pragma acc data present(i_in[0:nxgrid], j_in[0:nxgrid], \
                          i_out[0:nxgrid],j_out[0:nxgrid], \
                          t_in[0:nxgrid], di_in[0:nxgrid], \
                          dj_in[0:nxgrid], area[0:nxgrid])
-#pragma acc data copyin(start, tmp_nxgrid)
+#pragma acc data copyin(start, tmp_nxgrid, nx_in, ny_in)
 #pragma acc parallel loop
         for (int ixgrid=0 ; ixgrid<tmp_nxgrid ; ixgrid++) {
+          int ii;
+          ii   = j_in2[ixgrid] * nx_in + i_in2[ixgrid];
           i_in[start+ixgrid] = i_in2[ixgrid];
           j_in[start+ixgrid] = j_in2[ixgrid];
           i_out[start+ixgrid] = i_out2[ixgrid];
           j_out[start+ixgrid] = j_out2[ixgrid];
           t_in[start+ixgrid] = t_in2[ixgrid];
-          di_in[start+ixgrid] = di_in2[ixgrid];
-          dj_in[start+ixgrid] = dj_in2[ixgrid];
+          di_in[start+ixgrid] = di_in2[ixgrid] - cellm_clon[ii];
+          dj_in[start+ixgrid] = dj_in2[ixgrid] - cellm_clat[ii];
           area[start+ixgrid] = area2[ixgrid];
         }
 #pragma acc exit data delete(i_in2[0:tmp_nxgrid], j_in2[0:tmp_nxgrid], \
                              i_out2[0:tmp_nxgrid], j_out2[0:tmp_nxgrid], \
                              area2[0:tmp_nxgrid], di_in2[0:tmp_nxgrid], \
                              dj_in2[0:tmp_nxgrid], pinterp2)
+#pragma acc exit data delete(cellm_area[0:nx_in*ny_in],         \
+                             cellm_clon[0:nx_in*ny_in],         \
+                             cellm_clat[0:nx_in*ny_in], cellm)
         free(tmp_interp[m].i_in);
         free(tmp_interp[m].j_in);
         free(tmp_interp[m].i_out);
@@ -230,21 +254,22 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
         free(tmp_interp[m].area);
         free(tmp_interp[m].di_in);
         free(tmp_interp[m].dj_in);
+        free(cell_in[m].area);
+        free(cell_in[m].clon);
+        free(cell_in[m].clat);
 
       }
+#pragma acc update host(i_in[0:nxgrid], j_in[0:nxgrid],             \
+                        i_out[0:nxgrid], j_out[0:nxgrid],           \
+                        t_in[0:nxgrid], di_in[0:nxgrid],            \
+                        dj_in[0:nxgrid], area[0:nxgrid])
 
-#pragma acc exit data copyout(i_in[0:nxgrid], j_in[0:nxgrid],   \
-                              i_out[0:nxgrid], j_out[0:nxgrid], \
-                              t_in[0:nxgrid], di_in[0:nxgrid],  \
-                              dj_in[0:nxgrid], area[0:nxgrid])
-#pragma acc exit data delete(pinterp)
+
 
     } // ntiles_out
 
 
-#ifdef _OPENACC
-    if(opcode & CONSERVE_ORDER2) get_interp_dij_acc(ntiles_in, ntiles_out, grid_in, cell_in, interp);
-#else
+#ifndef _OPENACC
     if(opcode & CONSERVE_ORDER2) get_interp_dij(ntiles_in, ntiles_out, grid_in, cell_in, interp);
 #endif
 
@@ -738,9 +763,12 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
   int *pgrad_mask;
   double *pdata_in, *pgrad_x, *pgrad_y, *pcell_area, *pweight;
   double *pfieldin_area;
+  Interp_config *pinterp;
 
   double *tmp_data_out, *tmp_area_out;
   int *tmp_missing_out ;
+
+  int *itile_nxgrid, *start_here, *end_here, *ij2_index;
 
   gsum_out = 0;
   interp_method = field_in->var[varid].interp_method;
@@ -784,6 +812,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
       tmp_missing_out[i]=0;
     }
 
+    pinterp =interp+m;
     pi_out = interp[m].i_out;
     pj_out = interp[m].j_out;
     pi_in = interp[m].i_in;
@@ -794,12 +823,34 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
     parea = interp[m].area;
     pdata_out = field_out[m].data;
 
+
+    //get indices
+    itile_nxgrid = (int *)calloc(ntiles_in, sizeof(int));
+    start_here = (int *)calloc(ntiles_in, sizeof(int));
+    end_here = (int *)calloc(ntiles_in, sizeof(int));
+#pragma acc enter data copyin(itile_nxgrid[0:ntiles_in], start_here[0:ntiles_in], end_here[0:ntiles_in])
+#pragma acc data present( pt_in[0:nxgrid] )
+#pragma acc parallel loop
+    for( int itile=0 ; itile<ntiles_in ; itile++ ) {
+      int icount=0;
+#pragma acc loop reduction(+:icount)
+      for( n=0 ; n<nxgrid ; n++ ){
+        if( pt_in[n] == itile ) icount++;
+      }
+      itile_nxgrid[itile] = icount;
+    }
+#pragma acc parallel loop seq
+    for(int itile=0 ; itile<ntiles_in ; itile++){
+      for( int ii=0 ; ii<itile ; ii++) start_here[itile] += itile_nxgrid[ii];
+      end_here[itile] = start_here[itile] + itile_nxgrid[itile];
+    }
+#pragma acc exit data delete(itile_nxgrid[0:ntiles_in])
+    free(itile_nxgrid);
+
 #pragma acc enter data copyin( tmp_data_out[0:nxgrid] )
 #pragma acc enter data copyin( tmp_area_out[0:nxgrid])
 #pragma acc enter data copyin( tmp_missing_out[0:nxgrid] )
-#pragma acc enter data copyin( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz] )
-#pragma acc enter data copyin( pi_out[0:nxgrid], pj_out[0:nxgrid], pi_in[0:nxgrid], pj_in[0:nxgrid], pdi_in[0:nxgrid], pdj_in[0:nxgrid] )
-#pragma acc enter data copyin( pt_in[0:nxgrid], parea[0:nxgrid], pdata_out[0:nx2*ny2*nz] )
+#pragma acc enter data copyin( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz] )
 
     if(has_missing) {
 
@@ -815,27 +866,23 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
         nx1  = grid_in[itile].nx;
         ny1  = grid_in[itile].ny;
 
-
+#pragma acc data present( start_here[0:ntiles_in], end_here[0:ntiles_in] )
+#pragma acc data present( pinterp )
 #pragma acc data present( pi_out[0:nxgrid], pj_out[0:nxgrid], pi_in[0:nxgrid], pj_in[0:nxgrid], pdi_in[0:nxgrid], pdj_in[0:nxgrid] )
-#pragma acc data present( pt_in[0:nxgrid], parea[0:nxgrid], pdata_out[0:nx2*ny2*nz] )
-#pragma acc data present( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz] )
+#pragma acc data present( pt_in[0:nxgrid], parea[0:nxgrid])
+#pragma acc data present( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz] )
 #pragma acc data present( tmp_data_out[0:nxgrid], tmp_missing_out[0:nxgrid], tmp_area_out[0:nxgrid])
 #pragma acc data copyin( pdata_in[0:(nx1+2*halo)*(ny1+2*halo)*nz], pgrad_x[0:nx1*ny1*nz], pgrad_y[0:nx1*ny1*nz])
 #pragma acc data copyin( pweight[0:nx1*ny1], pgrad_mask[0:nx1*ny1*nz])
 #pragma acc data copyin( pfieldin_area[0:nx1*ny1], pgridin_area[0:nx1*ny1])
 #pragma acc parallel loop
-        for(n=0; n<nxgrid; n++) {
+        for(n=start_here[itile]; n<end_here[itile]; n++) {
 
-          //i2   = pi_out[n];
-          //j2   = pj_out[n];
           i1   = pi_in [n];
           j1   = pj_in [n];
           di   = pdi_in[n];
           dj   = pdj_in[n];
-          tile = pt_in [n];
           area = parea [n];
-
-          if( tile != itile ) continue;
 
           if(weight_exist) area *= pweight[j1*nx1+i1];
           n2 = (j1+1)*(nx1+2)+i1+1;
@@ -876,6 +923,8 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
         nx1  = grid_in[itile].nx;
         ny1  = grid_in[itile].ny;
 
+#pragma acc data present( start_here[0:ntiles_in], end_here[0:ntiles_in] )
+#pragma acc data present( pinterp )
 #pragma acc data present( pi_out[0:nxgrid], pj_out[0:nxgrid], pi_in[0:nxgrid], pj_in[0:nxgrid], pdi_in[0:nxgrid], pdj_in[0:nxgrid] )
 #pragma acc data present( pt_in[0:nxgrid], parea[0:nxgrid], pdata_out[0:nx2*ny2*nz] )
 #pragma acc data present( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz] )
@@ -884,18 +933,13 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 #pragma acc data copyin( pweight[0:nx1*ny1])
 #pragma acc data copyin( pfieldin_area[0:nx1*ny1], pgridin_area[0:nx1*ny1])
 #pragma acc parallel loop
-        for(n=0; n<nxgrid; n++) {
+        for(n=start_here[itile]; n<end_here[itile]; n++) {
 
-          i2   = pi_out[n];
-          j2   = pj_out[n];
           i1   = pi_in [n];
           j1   = pj_in [n];
           di   = pdi_in[n];
           dj   = pdj_in[n];
-          tile = pt_in [n];
           area = parea [n];
-
-          if( tile != itile ) continue;
 
           if(weight_exist) area *= pweight[j1*nx1+i1];
 #pragma acc loop seq
@@ -915,43 +959,76 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
       } //itile
     } //if
 
-#pragma acc data present( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz] )
-#pragma acc data present( tmp_data_out[0:nxgrid], tmp_missing_out[0:nxgrid], tmp_area_out[0:nxgrid])
-#pragma acc parallel loop seq
-      for(n=0 ; n<nxgrid ; n++) {
-        i2   = pi_out[n];
-        j2   = pj_out[n];
-        n0 = j2*nx2+i2;
-        pdata_out[n0] += tmp_data_out[n];
-        out_area[n0] += tmp_area_out[n];
-        if( tmp_missing_out[n] > 0 ) out_miss[n0] = 1;
-      }
+    //#pragma acc data present( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz] )
+    //#pragma acc data present( tmp_data_out[0:nxgrid], tmp_missing_out[0:nxgrid], tmp_area_out[0:nxgrid])
+    //#pragma acc parallel loop seq
+    //for(n=0 ; n<nxgrid ; n++) {
+    //  i2   = pi_out[n];
+    //  j2   = pj_out[n];
+    //  n0 = j2*nx2+i2;
+    //  pdata_out[n0] += tmp_data_out[n];
+    //  out_area[n0] += tmp_area_out[n];
+    //  if( tmp_missing_out[n] > 0 ) out_miss[n0] = 1;
+    // }
+    ij2_index = (int *)malloc( nxgrid*sizeof(int));
+#pragma acc enter data copyin(ij2_index[0:nxgrid])
 
+#pragma acc data present( ij2_index[0:nxgrid], pj_out[0:nxgrid], pi_out[0:nxgrid])
+#pragma acc parallel loop
+    for(n=0 ; n<nxgrid ; n++) {
+      ij2_index[n] = pj_out[n] * nx2 + pi_out[n];
+    }
+
+#pragma acc data present(ij2_index[0:nxgrid], tmp_data_out[0:nxgrid], \
+                         tmp_area_out[0:nxgrid], tmp_missing_out[0:nxgrid])
+#pragma acc parallel loop
+    for(n=0 ; n<nx2*ny2*nz ; n++){
+      double data_cum=0.;
+      double area_cum=0.;
+      int miss_cum=0;
+#pragma acc loop reduction(+:data_cum) reduction(+:area_cum) reduction(max:miss_cum)
+      for(int ixgrid=0 ; ixgrid<nxgrid ; ixgrid++){
+        if(ij2_index[ixgrid]==n) {
+          data_cum += tmp_data_out[ixgrid];
+          area_cum += tmp_area_out[ixgrid];
+          if( tmp_missing_out[ixgrid] > 0 ) miss_cum=max(miss_cum,1);
+        }
+      }
+      pdata_out[n]=data_cum;
+      out_area[n]=area_cum;
+      out_miss[n]=miss_cum;
+    }
+
+    free(tmp_area_out);
+    free(tmp_missing_out);
 #pragma acc exit data delete( tmp_data_out[0:nxgrid], tmp_missing_out[0:nxgrid], tmp_area_out[0:nxgrid] )
-#pragma acc exit data copyout(pdata_out[0:nx2*ny2*nz])
-#pragma acc exit data copyout(out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz])
-#pragma acc exit data delete(pi_out[0:nxgrid], pj_out[0:nxgrid], \
-                             pi_in[0:nxgrid], pj_in[0:nxgrid], \
-                             pt_in[0:nxgrid], parea[0:nxgrid], \
-                             pdi_in[0:nxgrid], pdj_in[0:nxgrid])
 
     if(opcode & CHECK_CONSERVE) {
+#pragma acc data present( pdata_out[0:nx2*ny2*nz], out_area[0:nx2*ny2*nz])
+#pragma acc data copy(gsum_out)
+#pragma acc parallel loop reduction(+:gsum_out)
       for(i=0; i<nx2*ny2*nz; i++) {
         if(out_area[i] > 0) gsum_out += pdata_out[i];
       }
     }
 
     if ( cell_methods == CELL_METHODS_SUM ) {
+#pragma acc data present(out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz])
+#pragma acc parallel loop
       for(i=0; i<nx2*ny2*nz; i++) {
         if(out_area[i] == 0) {
           if(out_miss[i] == 0)
+#pragma acc loop
             for(k=0; k<nz; k++) pdata_out[k*nx2*ny2+i] = missing;
           else
+#pragma acc loop
             for(k=0; k<nz; k++) pdata_out[k*nx2*ny2+i] = 0.0;
         }
       }
     }
     else {
+#pragma acc data present(out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz])
+#pragma acc parallel loop
       for(i=0; i<nx2*ny2*nz; i++) {
         if(out_area[i] > 0)
           pdata_out[i] /= out_area[i];
@@ -962,28 +1039,48 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
       }
 
       if( (target_grid) ) {
+#pragma acc data present(out_area[0:nx2*ny2*nz])
+#pragma acc parallel loop
         for(i=0; i<nx2*ny2; i++) out_area[i] = 0.0;
-        for(n=0; n<interp[m].nxgrid; n++) {
-          i2   = pi_out[n];
-          j2   = pj_out[n];
-          i1   = pi_in [n];
-          j1   = pj_in [n];
-          tile = pt_in [n];
-          area = parea [n];
-          nx1  = grid_in[tile].nx;
-          ny1  = grid_in[tile].ny;
-          n0 = j2*nx2+i2;
-          n1 = j1*nx1+i1;
-          if(cell_measures )
-            out_area[n0] += (area*field_in[tile].area[n1]/grid_in[tile].cell_area[n1]);
-          else
-            out_area[n0] += area;
-        }
-        for(i=0; i<nx2*ny2*nz; i++) {
-          if(field_out[m].data[i] != missing) {
-            i2 = i%(nx2*ny2);
-            pdata_out[i] *=  (out_area[i2]/grid_out[m].cell_area[i2]);
+
+        for( int itile=0 ; itile<ntiles_in ; itile++) {
+          nx1  = grid_in[itile].nx;
+          ny1  = grid_in[itile].ny;
+          pgridin_area = grid_in[itile].cell_area;
+          pfieldin_area = field_in[itile].area;
+
+#pragma acc data present(ij2_index[0:nxgrid], start_here[0:ntiles_in], end_here[0:ntiles_in])
+#pragma acc data present( pi_in[0:nxgrid], pj_in[0:nxgrid])
+#pragma acc data present(parea[0:nxgrid], out_area[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz])
+#pragma acc data copyin(pgridin_area[0:nx2*ny2], pfieldin_area[0:nx2*ny2])
+#pragma acc parallel loop
+          for(int nxy2=0 ; nxy2<nx2*ny2*nz ; nxy2++) {
+            double area_cum=0.;
+#pragma acc loop reduction(+:area_cum)
+            for(n=start_here[itile] ; n<end_here[itile]; n++) {
+              if(ij2_index[n] == nxy2) {
+                n1 = j1*nx1+i1;
+                area = parea [n];
+                if(cell_measures )
+                  area_cum += (area*pfieldin_area[n1]/pgridin_area[n1]);
+                else
+                  area_cum += area;
+              }
+            }
+            out_area[nxy2] = area_cum;
           }
+        }
+      }
+
+      pcell_area = grid_out[m].cell_area;
+
+#pragma acc data copyin(pcell_area[0:nx2*ny2])
+#pragma acc data present(out_area[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz])
+#pragma acc loop
+      for(i=0; i<nx2*ny2*nz; i++) {
+        if(pdata_out[i] != missing) {
+          i2 = i%(nx2*ny2);
+          pdata_out[i] *=  (out_area[i2]/pcell_area[i2]);
         }
       }
     }
@@ -991,8 +1088,14 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
     free(out_area);
     free(out_miss);
     free(tmp_data_out);
-    free(tmp_area_out);
-    free(tmp_missing_out);
+    free(ij2_index);
+    free(start_here);
+    free(end_here);
+#pragma acc exit data delete(ij2_index[0:nxgrid])
+#pragma acc exit data delete( start_here[0:ntiles_in], end_here[0:ntiles_in] )
+#pragma acc exit data copyout(pdata_out[0:nx2*ny2*nz])
+#pragma acc exit data delete(out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz])
+
   } //m
 
   /* conservation check if needed */
@@ -1205,7 +1308,7 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   for(int i=0; i<nx_in*ny_in; i++) mask[i] = 1.0;
 
 #pragma acc enter data copyin(grid_in[m].latc[0:(nx_in+1)*(ny_in+1)], \
-  grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)], mask[0:nx_in*ny_in],\
+                              grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)], mask[0:nx_in*ny_in], \
                               grid_in[m].cell_area[0:nx_in*ny_in])
 
 
@@ -1228,11 +1331,10 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
                                          &xgrid_area, &xgrid_clon, &xgrid_clat, cell_in+m, jstart, m);
   interp[n].nxgrid += nxgrid;
 
-#pragma acc exit data copyout(cell_in[m].area[0:nx_in*ny_in], \
-                              cell_in[m].clon[0:nx_in*ny_in], \
-                              cell_in[m].clat[0:nx_in*ny_in])
-
-
+  get_interp_dij_acc(m, nx_in, ny_in, grid_in[m].cell_area, grid_in[m].latc, grid_in[m].lonc, cell_in+m);
+  //#pragma acc exit data copyout( cell_in[m].area[0:nx_in*ny_in], cell_in[m].clon[0:nx_in*ny_in], \
+  //                             cell_in[m].clat[0:nx_in*ny_in])
+  //
 #pragma acc exit data delete(counts_per_ij1[0:nx_in*ny_in], \
                              ij2_start[0:nx_in*ny_in],      \
                              ij2_end[0:nx_in*ny_in])

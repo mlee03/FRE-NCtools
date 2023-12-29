@@ -103,7 +103,19 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
       free(t_in);
       free(ind);
       malloc_xgrid_arrays(zero, &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon, &xgrid_clat);
+
     }//if read from file
+
+#pragma acc enter data copyin( interp[n] )
+#pragma acc enter data copyin( interp[n].i_in[0:nxgrid], interp[n].j_in[0:nxgrid], \
+                               interp[n].i_out[0:nxgrid], interp[n].j_out[0:nxgrid], \
+                               interp[n].area[0:nxgrid], \
+                               interp[n].t_in[0:nxgrid], interp[n].nxgrid)
+
+    if(opcode & CONSERVE_ORDER2) {
+#pragma acc enter data copyin( interp[n].di_in[0:nxgrid], interp[n].dj_in[0:nxgrid])
+    }
+
   } // ntiles
   if(mpp_pe() == mpp_root_pe())printf("NOTE: Finish reading index and weight for conservative interpolation from file.\n");
 
@@ -364,61 +376,70 @@ void get_interp_dij(const int ntiles_in, const int ntiles_out,
 /*******************************************************************************
   void get_interp_dij_acc
 ********************************************************************************/
-void get_interp_dij_acc(const int ntiles_in, const int ntiles_out,
-                    const Grid_config *grid_in, CellStruct *cell_in, Interp_config *interp)
+void get_interp_dij_acc(const int m, const int nx_in, const int ny_in, const double *grid_area,
+                        const double *latc, const double *lonc, CellStruct *cellin_m)
 {
 
-  int nx_in, ny_in;
-  double x1_in[50], y1_in[50], lon_in_avg, clon, clat;
-  int    i, ii, j, n, n0, n1, n2, n3, n1_in, tile;
+  int nxp, nyp;
+  double *cellm_clon, *cellm_clat, *cellm_area;
+  nxp = nx_in + 1;
+  nyp = ny_in + 1;
 
-  for(n=0 ; n<ntiles_in; n++) {
+  cellm_clat = cellin_m->clat;
+  cellm_clon = cellin_m->clon;
+  cellm_area = cellin_m->area;
 
-    /* calcualte cell area */
-    nx_in = grid_in[n].nx;
-    ny_in = grid_in[n].ny;
-    for(j=0; j<ny_in; j++) {
-      for(i=0; i<nx_in; i++) {
+#pragma acc data present(cellin_m)
+#pragma acc data present(cellm_clat[0:nx_in*ny_in], \
+                         cellm_clon[0:nx_in*ny_in], \
+                         cellm_area[0:nx_in*ny_in])
+#pragma acc data present( grid_area[0:nx_in*ny_in], latc[0:nxp*nyp], lonc[0:nxp*nyp] )
+#pragma acc data copyin(nx_in, ny_in, M_PI)
+#pragma acc parallel loop collapse(2)
+    for(int j=0; j<ny_in; j++) {
+      for(int i=0; i<nx_in; i++) {
+        double x1_in[50], y1_in[50], lon_in_avg, clon, clat;
+        int    n, n0, n1, n2, n3, n1_in, ii;
+
         ii = j*nx_in + i;
-        if(cell_in[n].area[ii] > 0) {
-          if( fabs(cell_in[n].area[ii]-grid_in[n].cell_area[ii])/grid_in[n].cell_area[ii] < AREA_RATIO ) {
-            cell_in[n].clon[ii] /= cell_in[n].area[ii];
-            cell_in[n].clat[ii] /= cell_in[n].area[ii];
+        if(cellm_area[ii] > 0) {
+          if( fabs(cellm_area[ii]-grid_area[ii])/grid_area[ii] < AREA_RATIO ) {
+            cellm_clon[ii] /= cellm_area[ii];
+            cellm_clat[ii] /= cellm_area[ii];
           }
           else {
             n0 = j*(nx_in+1)+i;       n1 = j*(nx_in+1)+i+1;
             n2 = (j+1)*(nx_in+1)+i+1; n3 = (j+1)*(nx_in+1)+i;
-            x1_in[0] = grid_in[n].lonc[n0]; y1_in[0] = grid_in[n].latc[n0];
-            x1_in[1] = grid_in[n].lonc[n1]; y1_in[1] = grid_in[n].latc[n1];
-            x1_in[2] = grid_in[n].lonc[n2]; y1_in[2] = grid_in[n].latc[n2];
-            x1_in[3] = grid_in[n].lonc[n3]; y1_in[3] = grid_in[n].latc[n3];
+            x1_in[0] = lonc[n0]; y1_in[0] = latc[n0];
+            x1_in[1] = lonc[n1]; y1_in[1] = latc[n1];
+            x1_in[2] = lonc[n2]; y1_in[2] = latc[n2];
+            x1_in[3] = lonc[n3]; y1_in[3] = latc[n3];
             n1_in = fix_lon(x1_in, y1_in, 4, M_PI);
             lon_in_avg = avgval_double(n1_in, x1_in);
             clon = poly_ctrlon(x1_in, y1_in, n1_in, lon_in_avg);
             clat = poly_ctrlat (x1_in, y1_in, n1_in );
-            cell_in[n].clon[ii] = clon/grid_in[n].cell_area[ii];
-            cell_in[n].clat[ii] = clat/grid_in[n].cell_area[ii];
+            cellm_clon[ii] = clon/grid_area[ii];
+            cellm_clat[ii] = clat/grid_area[ii];
           }
         }
       }
     }
-  }
-  for(n=0; n<ntiles_out; n++) {
-    for(i=0; i<interp[n].nxgrid; i++) {
-      tile = interp[n].t_in[i];
-      ii   = interp[n].j_in[i] * grid_in[tile].nx + interp[n].i_in[i];
-      interp[n].di_in[i] -= cell_in[tile].clon[ii];
-      interp[n].dj_in[i] -= cell_in[tile].clat[ii];
-    }
-  }
+//for(n=0; n<ntiles_out; n++) {
+//    for(i=0; i<interp[n].nxgrid; i++) {
+//      tile = interp[n].t_in[i];
+//      ii   = interp[n].j_in[i] * grid_in[tile].nx + interp[n].i_in[i];
+//      interp[n].di_in[i] -= cell_in[tile].clon[ii];
+//      interp[n].dj_in[i] -= cell_in[tile].clat[ii];
+//    }
+//  }
 
   /* free the memory */
-  for(n=0; n<ntiles_in; n++) {
-    free(cell_in[n].area);
-    free(cell_in[n].clon);
-    free(cell_in[n].clat);
-  }
-  free(cell_in);
+//  for(n=0; n<ntiles_in; n++) {
+//    free(cell_in[n].area);
+//    free(cell_in[n].clon);
+//    free(cell_in[n].clat);
+//  }
+//  free(cell_in);
 
 
 }

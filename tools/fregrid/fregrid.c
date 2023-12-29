@@ -971,8 +971,8 @@ int main(int argc, char* argv[])
 
     setup_bilinear_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode, dlon_in, dlat_in, lonbegin_in, latbegin_in );
   }
-   else
-     setup_conserve_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode);
+  else
+    setup_conserve_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode);
    if(debug) {
      time_end = clock();
      time_setup_interp = 1.0*(time_end - time_start)/CLOCKS_PER_SEC;

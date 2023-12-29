@@ -64,6 +64,7 @@ int prepare_create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in
 #pragma acc data present(out_minmaxavg_lists->lat_min_list[0:nx2*ny2], out_minmaxavg_lists->lat_max_list[0:nx2*ny2])
 #pragma acc data present(out_minmaxavg_lists->lon_min_list[0:nx2*ny2], out_minmaxavg_lists->lon_max_list[0:nx2*ny2])
 #pragma acc data present(counts_per_ij1[0:nx1*ny1], ij2_start[0:nx1*ny1], ij2_end[0:nx1*ny1])
+#pragma acc data copyin( nx1, ny1, nx1p, nx2, ny2, M_PI )
 #pragma acc data copy(approx_nxgrid)
 #pragma acc parallel
 {
@@ -174,6 +175,9 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
 
   size_t nxgrid;
 
+  int *pi_in, *pj_in, *pi_out, *pj_out, *pnxgrid, *pt_in;
+  double *parea, *pdi_in, *pdj_in;
+
   nx1 = *nlon_in;
   ny1 = *nlat_in;
   nx2 = *nlon_out;
@@ -208,8 +212,10 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
                               j_in2[0:approx_nxgrid], j_out2[0:approx_nxgrid], i_out2[0:approx_nxgrid])
 #pragma acc enter data copyin(i_in2[0:approx_nxgrid])
 #pragma acc enter data copyin(approx_nxgrid)
+
 #pragma acc data present(lon_out[0:(nx2+1)*(ny2+1)], lat_out[0:(nx2+1)*(ny2+1)])
 #pragma acc data present(lon_in[0:(nx1+1)*(ny1+1)], lat_in[0:(nx1+1)*(ny1+1)], mask_in[0:nx1*ny1])
+#pragma acc data present(cell_in_m)
 #pragma acc data present(cellm_area[0:nx1*ny1], cellm_clon[0:nx1*ny1], cellm_clat[0:nx1*ny1])
 #pragma acc data present(xgrid_area2[0:approx_nxgrid], xgrid_clon2[0:approx_nxgrid], xgrid_clat2[0:approx_nxgrid], \
                          i_in2[0:approx_nxgrid], j_in2[0:approx_nxgrid], j_out2[0:approx_nxgrid], i_out2[0:approx_nxgrid])
@@ -221,6 +227,7 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
 #pragma acc data present(counts_per_ij1[0:nx1*ny1], ij2_start[0:nx1*ny1], ij2_end[0:nx1*ny1])
 #pragma acc data present(approx_nxgrid)
 #pragma acc data copyin(area_in[0:nx1*ny1], area_out[0:nx2*ny2])
+#pragma acc data copyin(nx1, ny1, nx2, ny2, nx1p, jstart, M_PI)
 #pragma acc data copy(nxgrid)
 #pragma acc parallel
 {
@@ -233,9 +240,7 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
       int ij1_start, ixgrid;
       double lat_in_min, lat_in_max, lon_in_min, lon_in_max, lon_in_avg;
       double x1_in[MV], y1_in[MV];
-
       double cell_in_area, cell_in_clon, cell_in_clat;
-      double clon, clat;
       int ij1_jstart;
 
       i1 = ij1%nx1;
@@ -343,64 +348,53 @@ int create_xgrid_2dx2d_order2_acc(const int *nlon_in, const int *nlat_in, const 
  tmp_interp->di_in = (double *)malloc(nxgrid*sizeof(double));
  tmp_interp->dj_in = (double *)malloc(nxgrid*sizeof(double));
  tmp_interp->nxgrid = nxgrid;
+
+
+ pi_in = tmp_interp->i_in;
+ pj_in = tmp_interp->j_in;
+ pi_out = tmp_interp->i_out;
+ pj_out = tmp_interp->j_out;
+ pt_in = tmp_interp->t_in;
+ parea = tmp_interp->area;
+ pdi_in = tmp_interp->di_in;
+ pdj_in = tmp_interp->dj_in;
+ pnxgrid = &(tmp_interp->nxgrid);
+
 #pragma acc enter data create(tmp_interp)
-#pragma acc enter data create(tmp_interp->i_in[0:nxgrid], tmp_interp->j_in[0:nxgrid], \
-                              tmp_interp->i_out[0:nxgrid], tmp_interp->j_out[0:nxgrid], \
-                              tmp_interp->area[0:nxgrid], tmp_interp->di_in[0:nxgrid],\
-                              tmp_interp->dj_in[0:nxgrid], tmp_interp->t_in[0:nxgrid])
-#pragma acc enter data copyin(tmp_interp->nxgrid)
+#pragma acc enter data create(pi_in[0:nxgrid], pj_in[0:nxgrid], \
+                              pi_out[0:nxgrid], pj_out[0:nxgrid], \
+                              parea[0:nxgrid], pdi_in[0:nxgrid],  \
+                              pdj_in[0:nxgrid], pt_in[0:nxgrid])
+#pragma acc enter data copyin(pnxgrid)
 
  ixgrid2=0;
 #pragma acc data present(xgrid_area2[0:approx_nxgrid], xgrid_clon2[0:approx_nxgrid], xgrid_clat2[0:approx_nxgrid], \
                          i_in2[0:approx_nxgrid], j_in2[0:approx_nxgrid], j_out2[0:approx_nxgrid], i_out2[0:approx_nxgrid])
 #pragma acc data present(tmp_interp)
-#pragma acc data present(tmp_interp->i_in[0:nxgrid], tmp_interp->j_in[0:nxgrid], \
-                         tmp_interp->i_out[0:nxgrid], tmp_interp->j_out[0:nxgrid], \
-                         tmp_interp->area[0:nxgrid], tmp_interp->di_in[0:nxgrid], \
-                         tmp_interp->dj_in[0:nxgrid], tmp_interp->t_in[0:nxgrid])
+#pragma acc data present(pi_in[0:nxgrid], pj_in[0:nxgrid], \
+                         pi_out[0:nxgrid], pj_out[0:nxgrid],            \
+                         parea[0:nxgrid], pdi_in[0:nxgrid],             \
+                         pdj_in[0:nxgrid], pt_in[0:nxgrid], pnxgrid)
 #pragma acc data present(approx_nxgrid)
-#pragma acc data copyin(ixgrid2)
+#pragma acc data copyin(ixgrid2, m)
 #pragma acc parallel loop seq
  for(int i=0 ; i<approx_nxgrid ; i++) {
    if( i_in2[i]!=-99) {
-     tmp_interp->i_in[ixgrid2] = i_in2[i];
-     tmp_interp->j_in[ixgrid2] = j_in2[i];
-     tmp_interp->i_out[ixgrid2] = i_out2[i];
-     tmp_interp->j_out[ixgrid2] = j_out2[i];
-     tmp_interp->t_in[ixgrid2] = m;
-     tmp_interp->area[ixgrid2] = xgrid_area2[i];
-     tmp_interp->di_in[ixgrid2] = xgrid_clon2[i]/xgrid_area2[i];
-     tmp_interp->dj_in[ixgrid2] = xgrid_clat2[i]/xgrid_area2[i];
+     pi_in[ixgrid2] = i_in2[i];
+     pj_in[ixgrid2] = j_in2[i];
+     pi_out[ixgrid2] = i_out2[i];
+     pj_out[ixgrid2] = j_out2[i];
+     pt_in[ixgrid2] = m;
+     parea[ixgrid2] = xgrid_area2[i];
+     pdi_in[ixgrid2] = xgrid_clon2[i]/xgrid_area2[i];
+     pdj_in[ixgrid2] = xgrid_clat2[i]/xgrid_area2[i];
      ixgrid2++;
    }
  }
 
-#pragma acc exit data copyout(approx_nxgrid)
-#pragma acc exit data copyout(xgrid_area2[0:approx_nxgrid], xgrid_clon2[0:approx_nxgrid], xgrid_clat2[0:approx_nxgrid], \
-                              i_in2[0:approx_nxgrid], j_in2[0:approx_nxgrid], j_out2[0:approx_nxgrid], i_out2[0:approx_nxgrid])
-
- // record data
- *i_in=(int *)malloc(nxgrid*sizeof(int));
- *j_in=(int *)malloc(nxgrid*sizeof(int));
- *i_out=(int *)malloc(nxgrid*sizeof(int));
- *j_out=(int *)malloc(nxgrid*sizeof(int));
- *xgrid_area=(double *)malloc(nxgrid*sizeof(double));
- *xgrid_clon=(double *)malloc(nxgrid*sizeof(double));
- *xgrid_clat=(double *)malloc(nxgrid*sizeof(double));
-
- ixgrid2=0;
- for(int i=0 ; i<approx_nxgrid ; i++) {
-   if( i_in2[i]!=-99) {
-     (*i_in)[ixgrid2] = i_in2[i];
-     (*j_in)[ixgrid2] = j_in2[i];
-     (*i_out)[ixgrid2] = i_out2[i];
-     (*j_out)[ixgrid2] = j_out2[i];
-     (*xgrid_area)[ixgrid2] = xgrid_area2[i];
-     (*xgrid_clon)[ixgrid2] = xgrid_clon2[i];
-     (*xgrid_clat)[ixgrid2] = xgrid_clat2[i];
-     ixgrid2++;
-   }
- }
+#pragma acc exit data delete(approx_nxgrid)
+#pragma acc exit data delete(xgrid_area2[0:approx_nxgrid], xgrid_clon2[0:approx_nxgrid], xgrid_clat2[0:approx_nxgrid], \
+                             i_in2[0:approx_nxgrid], j_in2[0:approx_nxgrid], j_out2[0:approx_nxgrid], i_out2[0:approx_nxgrid])
 
  free(i_in2);
  free(j_in2);

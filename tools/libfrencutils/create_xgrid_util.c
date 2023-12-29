@@ -112,7 +112,7 @@ void get_minmaxavg_lists(const int nx, const int ny, const double *lon, const do
 #pragma acc data present(minmaxavg_lists->n_list[0:nx*ny], minmaxavg_lists->lon_avg[0:nx*ny])
 #pragma acc data present(minmaxavg_lists->lat_min_list[0:nx*ny], minmaxavg_lists->lat_max_list[0:nx*ny])
 #pragma acc data present(minmaxavg_lists->lon_min_list[0:nx*ny], minmaxavg_lists->lon_max_list[0:nx*ny])
-
+#pragma acc data copyin(nx, ny, nxp, nyp)
 #pragma acc parallel loop independent
   for(int ij=0; ij<nx*ny; ij++){
     int i, j, n, n0, n1, n2, n3, n_in, l;
