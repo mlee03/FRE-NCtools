@@ -698,12 +698,12 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
     parea = interp[m].area;
     pdata_out = field_out[m].data;
 
-
     //get indices
     itile_nxgrid = (int *)calloc(ntiles_in, sizeof(int));
     start_here = (int *)calloc(ntiles_in, sizeof(int));
     end_here = (int *)calloc(ntiles_in, sizeof(int));
 #pragma acc enter data copyin(itile_nxgrid[0:ntiles_in], start_here[0:ntiles_in], end_here[0:ntiles_in])
+
 #pragma acc data present( pt_in[0:nxgrid] )
 #pragma acc parallel loop
     for( int itile=0 ; itile<ntiles_in ; itile++ ) {
@@ -761,7 +761,6 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 
           if(weight_exist) area *= pweight[j1*nx1+i1];
           n2 = (j1+1)*(nx1+2)+i1+1;
-          //n0 = j2*nx2+i2;
           if( pdata_in[n2] != missing ) {
             n1 = j1*nx1+i1;
             if( cell_methods == CELL_METHODS_SUM )
@@ -834,17 +833,6 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
       } //itile
     } //if
 
-    //#pragma acc data present( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz] )
-    //#pragma acc data present( tmp_data_out[0:nxgrid], tmp_missing_out[0:nxgrid], tmp_area_out[0:nxgrid])
-    //#pragma acc parallel loop seq
-    //for(n=0 ; n<nxgrid ; n++) {
-    //  i2   = pi_out[n];
-    //  j2   = pj_out[n];
-    //  n0 = j2*nx2+i2;
-    //  pdata_out[n0] += tmp_data_out[n];
-    //  out_area[n0] += tmp_area_out[n];
-    //  if( tmp_missing_out[n] > 0 ) out_miss[n0] = 1;
-    // }
     ij2_index = (int *)malloc( nxgrid*sizeof(int));
     ixgrid_start = (int *)calloc( nx2*ny2,sizeof(int));
     ixgrid_end = (int *)calloc( nx2*ny2, sizeof(int));
@@ -956,7 +944,6 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
             istart=max(start_here[itile], ixgrid_start[nxy2]);
             iend=min(end_here[itile], ixgrid_end[nxy2]);
 #pragma acc loop reduction(+:area_cum)
-            //for(n=start_here[itile] ; n<end_here[itile]; n++) {
             for(n=istart ; n<iend; n++) {
               if(ij2_index[n] == nxy2) {
                 n1 = j1*nx1+i1;
