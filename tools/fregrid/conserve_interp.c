@@ -159,6 +159,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 #pragma acc exit data delete(out_minmaxavg_lists)
       malloc_minmaxavg_lists(zero, &out_minmaxavg_lists);
 
+#ifdef _OPENACC
       //copy over interp from interp_tmp
       nxgrid = interp[n].nxgrid;
       interp[n].i_in = (int *)malloc(nxgrid*sizeof(int));
@@ -264,7 +265,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
                         t_in[0:nxgrid], di_in[0:nxgrid],            \
                         dj_in[0:nxgrid], area[0:nxgrid])
 
-
+#endif
 
     } // ntiles_out
 
@@ -1332,9 +1333,6 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   interp[n].nxgrid += nxgrid;
 
   get_interp_dij_acc(m, nx_in, ny_in, grid_in[m].cell_area, grid_in[m].latc, grid_in[m].lonc, cell_in+m);
-  //#pragma acc exit data copyout( cell_in[m].area[0:nx_in*ny_in], cell_in[m].clon[0:nx_in*ny_in], \
-  //                             cell_in[m].clat[0:nx_in*ny_in])
-  //
 #pragma acc exit data delete(counts_per_ij1[0:nx_in*ny_in], \
                              ij2_start[0:nx_in*ny_in],      \
                              ij2_end[0:nx_in*ny_in])
