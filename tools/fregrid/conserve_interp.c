@@ -92,10 +92,9 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
                               grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
 
       //allocate memory for the lists
-      malloc_minmaxavg_lists(nx_out*ny_out, &out_minmaxavg_lists);
-
-      //compute the list values
 #ifdef _OPENACC
+      malloc_minmaxavg_lists(nx_out*ny_out, &out_minmaxavg_lists);
+      //compute the list values
       get_minmaxavg_lists(nx_out, ny_out, grid_out[n].lonc, grid_out[n].latc, &out_minmaxavg_lists);
 #endif
 
