@@ -429,11 +429,11 @@ void get_interp_dij_acc(const int m, const int nx_in, const int ny_in, const dou
 /*******************************************************************************
   void get_interp_acc
 ********************************************************************************/
-void get_interp_acc(const int n, const int ntiles_in, const int nx_in, const int ny_in,
+void get_interp_acc(const int n, const int ntiles_in, Grid_config *grid_in,
                     Interp_config *interp, Interp_config *tmp_interp, CellStruct *cell_in)
 {
 
-  int nxgrid;
+  int nxgrid, nx_in, ny_in;
   int *i_in, *j_in, *i_out, *j_out, *t_in;
   double *area, *di_in, *dj_in;
   Interp_config *pinterp;
@@ -473,6 +473,9 @@ void get_interp_acc(const int n, const int ntiles_in, const int nx_in, const int
 
     double *cellm_area, *cellm_clon, *cellm_clat;
     CellStruct *cellm;
+
+    nx_in = grid_in[m].nx;
+    ny_in = grid_in[m].ny;
 
     for( int mm=0 ; mm<m; mm++) start+=tmp_interp[mm].nxgrid;
 
