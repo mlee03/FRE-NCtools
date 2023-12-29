@@ -770,6 +770,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
   int *tmp_missing_out ;
 
   int *itile_nxgrid, *start_here, *end_here, *ij2_index;
+  int *ixgrid_start, *ixgrid_end;
 
   gsum_out = 0;
   interp_method = field_in->var[varid].interp_method;
@@ -972,7 +973,11 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
     //  if( tmp_missing_out[n] > 0 ) out_miss[n0] = 1;
     // }
     ij2_index = (int *)malloc( nxgrid*sizeof(int));
+    ixgrid_start = (int *)calloc( nx2*ny2,sizeof(int));
+    ixgrid_end = (int *)calloc( nx2*ny2, sizeof(int));
+
 #pragma acc enter data copyin(ij2_index[0:nxgrid])
+#pragma acc enter data copyin(ixgrid_start[0:nx2*ny2], ixgrid_end[0:nx2*ny2])
 
 #pragma acc data present( ij2_index[0:nxgrid], pj_out[0:nxgrid], pi_out[0:nxgrid])
 #pragma acc parallel loop
@@ -980,15 +985,32 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
       ij2_index[n] = pj_out[n] * nx2 + pi_out[n];
     }
 
+#pragma acc data present(ij2_index[0:nxgrid], ixgrid_start[0:nx2*ny2], ixgrid_end[0:nx2*ny2])
+#pragma acc parallel loop
+    for(n=0 ; n<nx2*ny2 ; n++){
+      int istart=nx2*ny2+1;
+      int iend=0;
+#pragma acc loop reduction(min:istart) reduction(max:iend)
+      for( int ixgrid=0 ; ixgrid<nxgrid ; ixgrid++){
+        if(ij2_index[ixgrid]==n) {
+          istart=min(istart, ixgrid);
+          iend=max(iend, ixgrid);
+        }
+      }
+      ixgrid_start[n]=istart;
+      ixgrid_end[n]=iend+1;
+    }
+
 #pragma acc data present(ij2_index[0:nxgrid], tmp_data_out[0:nxgrid], \
                          tmp_area_out[0:nxgrid], tmp_missing_out[0:nxgrid])
+#pragma acc data present(ixgrid_start[0:nx2*ny2], ixgrid_end[0:nx2*ny2])
 #pragma acc parallel loop
     for(n=0 ; n<nx2*ny2*nz ; n++){
       double data_cum=0.;
       double area_cum=0.;
       int miss_cum=0;
 #pragma acc loop reduction(+:data_cum) reduction(+:area_cum) reduction(max:miss_cum)
-      for(int ixgrid=0 ; ixgrid<nxgrid ; ixgrid++){
+      for(int ixgrid=ixgrid_start[n] ; ixgrid<ixgrid_end[n] ; ixgrid++){
         if(ij2_index[ixgrid]==n) {
           data_cum += tmp_data_out[ixgrid];
           area_cum += tmp_area_out[ixgrid];
@@ -1057,8 +1079,12 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 #pragma acc parallel loop
           for(int nxy2=0 ; nxy2<nx2*ny2*nz ; nxy2++) {
             double area_cum=0.;
+            int istart, iend;
+            istart=max(start_here[itile], ixgrid_start[nxy2]);
+            iend=min(end_here[itile], ixgrid_end[nxy2]);
 #pragma acc loop reduction(+:area_cum)
-            for(n=start_here[itile] ; n<end_here[itile]; n++) {
+            //for(n=start_here[itile] ; n<end_here[itile]; n++) {
+            for(n=istart ; n<iend; n++) {
               if(ij2_index[n] == nxy2) {
                 n1 = j1*nx1+i1;
                 area = parea [n];
@@ -1092,7 +1118,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
     free(ij2_index);
     free(start_here);
     free(end_here);
-#pragma acc exit data delete(ij2_index[0:nxgrid])
+#pragma acc exit data delete(ij2_index[0:nxgrid], ixgrid_start[0:nx2*ny2], ixgrid_end[0:nx2*ny2])
 #pragma acc exit data delete( start_here[0:ntiles_in], end_here[0:ntiles_in] )
 #pragma acc exit data copyout(pdata_out[0:nx2*ny2*nz])
 #pragma acc exit data delete(out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz])
