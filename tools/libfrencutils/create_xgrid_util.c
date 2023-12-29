@@ -49,34 +49,43 @@ void malloc_minmaxavg_lists(const int n, Minmaxavg_lists *minmaxavg_lists)
 
   if( minmaxavg_lists->lon_min_list != NULL ) {
     free(minmaxavg_lists->lon_min_list);
+#pragma acc exit data delete( minmaxavg_lists->lon_min_list[0:n] )
     minmaxavg_lists-> lon_min_list = NULL;
   }
   if( minmaxavg_lists->lon_max_list != NULL ) {
     free(minmaxavg_lists->lon_max_list);
+#pragma acc exit data delete( minmaxavg_lists->lon_max_list[0:n] )
     minmaxavg_lists->lon_max_list = NULL;
   }
   if( minmaxavg_lists->lat_min_list != NULL ) {
     free(minmaxavg_lists->lat_min_list);
+#pragma acc exit data delete( minmaxavg_lists->lat_min_list[0:n] )
     minmaxavg_lists->lat_min_list = NULL;
   }
   if( minmaxavg_lists->lat_max_list != NULL ) {
     free(minmaxavg_lists->lat_max_list);
+#pragma acc exit data delete( minmaxavg_lists->lat_max_list[0:n] )
     minmaxavg_lists->lat_max_list = NULL;
   }
   if( minmaxavg_lists->n_list != NULL ) {
     free(minmaxavg_lists->n_list);
+#pragma acc exit data delete( minmaxavg_lists->n_list[0:n] )
     minmaxavg_lists->n_list = NULL;
   }
   if( minmaxavg_lists->lon_avg != NULL ) {
     free(minmaxavg_lists->lon_avg);
+#pragma acc exit data delete( minmaxavg_lists->lon_avg[0:n] )
     minmaxavg_lists->lon_avg = NULL;
   }
   if( minmaxavg_lists->lon_list != NULL ) {
     free(minmaxavg_lists->lon_list);
+#pragma acc exit data delete( minmaxavg_lists->lon_list[0:n*MAX_V] )
     minmaxavg_lists->lon_list = NULL;
   }
   if( minmaxavg_lists->lat_list != NULL ) {
     free(minmaxavg_lists->lat_list);
+#pragma acc exit data delete( minmaxavg_lists->lat_list[0:n*MAX_V] )
+#pragma acc exit data delete(minmaxavg_lists)
     minmaxavg_lists->lat_list = NULL;
   }
 
@@ -89,6 +98,17 @@ void malloc_minmaxavg_lists(const int n, Minmaxavg_lists *minmaxavg_lists)
     minmaxavg_lists->lon_avg=(double *)malloc(n*sizeof(double));
     minmaxavg_lists->lon_list=(double *)malloc(MAX_V*n*sizeof(double));
     minmaxavg_lists->lat_list=(double *)malloc(MAX_V*n*sizeof(double));
+
+#pragma acc enter data create(minmaxavg_lists)
+#pragma acc enter data create(minmaxavg_lists->lon_list[0:MAX_V*n], \
+                              minmaxavg_lists->lat_list[0:MAX_V*n], \
+                              minmaxavg_lists->lon_min_list[0:n], \
+                              minmaxavg_lists->lon_max_list[0:n], \
+                              minmaxavg_lists->lat_min_list[0:n], \
+                              minmaxavg_lists->lat_max_list[0:n], \
+                              minmaxavg_lists->n_list[0:n], \
+                              minmaxavg_lists->lon_avg[0:n] )
+
   }
 
 }//malloc_minmaxavg_lists

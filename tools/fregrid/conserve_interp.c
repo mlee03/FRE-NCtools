@@ -58,6 +58,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   double time_nxgrid=0;
   clock_t time_start, time_end;
 
+#ifdef _OPENACC
   Minmaxavg_lists out_minmaxavg_lists;
   out_minmaxavg_lists.lon_list=NULL;
   out_minmaxavg_lists.lat_list=NULL;
@@ -67,6 +68,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   out_minmaxavg_lists.lat_max_list=NULL;
   out_minmaxavg_lists.n_list=NULL;
   out_minmaxavg_lists.lon_avg=NULL;
+#endif
 
   if( opcode & READ) {
     read_remap_file(ntiles_in,ntiles_out, grid_out, interp, opcode);
@@ -110,19 +112,10 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
       //allocate memory for the lists
       malloc_minmaxavg_lists(nx_out*ny_out, &out_minmaxavg_lists);
 
-#define MAX_V 8
-#pragma acc enter data create(out_minmaxavg_lists)
-#pragma acc enter data create(out_minmaxavg_lists.lon_list[0:MAX_V*nx_out*ny_out], \
-                              out_minmaxavg_lists.lat_list[0:MAX_V*nx_out*ny_out], \
-                              out_minmaxavg_lists.lon_min_list[0:nx_out*ny_out], \
-                              out_minmaxavg_lists.lon_max_list[0:nx_out*ny_out], \
-                              out_minmaxavg_lists.lat_min_list[0:nx_out*ny_out], \
-                              out_minmaxavg_lists.lat_max_list[0:nx_out*ny_out], \
-                              out_minmaxavg_lists.n_list[0:nx_out*ny_out], \
-                              out_minmaxavg_lists.lon_avg[0:nx_out*ny_out] )
-
       //compute the list values
+#ifdef _OPENACC
       get_minmaxavg_lists(nx_out, ny_out, grid_out[n].lonc, grid_out[n].latc, &out_minmaxavg_lists);
+#endif
 
       //START NTILES_IN
       for(m=0; m<ntiles_in; m++) {
@@ -144,16 +137,9 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 
 #pragma acc exit data delete(grid_out[n].lonc[0:(nx_out+1)*(ny_out+1)], \
                              grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
-#pragma acc exit data delete(out_minmaxavg_lists.lon_list[0:MAX_V*nx_out*ny_out], \
-                             out_minmaxavg_lists.lat_list[0:MAX_V*nx_out*ny_out], \
-                             out_minmaxavg_lists.lon_min_list[0:nx_out*ny_out], \
-                             out_minmaxavg_lists.lon_max_list[0:nx_out*ny_out], \
-                             out_minmaxavg_lists.lat_min_list[0:nx_out*ny_out], \
-                             out_minmaxavg_lists.lat_max_list[0:nx_out*ny_out], \
-                             out_minmaxavg_lists.n_list[0:nx_out*ny_out], \
-                             out_minmaxavg_lists.lon_avg[0:nx_out*ny_out] )
-#pragma acc exit data delete(out_minmaxavg_lists)
+#ifdef _OPENACC
       malloc_minmaxavg_lists(zero, &out_minmaxavg_lists);
+#endif
 
 #ifdef _OPENACC
       get_interp_acc(n, ntiles_in, grid_in, interp, tmp_interp, cell_in);
