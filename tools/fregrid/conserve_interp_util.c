@@ -396,50 +396,146 @@ void get_interp_dij_acc(const int m, const int nx_in, const int ny_in, const dou
 #pragma acc data present( grid_area[0:nx_in*ny_in], latc[0:nxp*nyp], lonc[0:nxp*nyp] )
 #pragma acc data copyin(nx_in, ny_in, M_PI)
 #pragma acc parallel loop collapse(2)
-    for(int j=0; j<ny_in; j++) {
-      for(int i=0; i<nx_in; i++) {
-        double x1_in[50], y1_in[50], lon_in_avg, clon, clat;
-        int    n, n0, n1, n2, n3, n1_in, ii;
+  for(int j=0; j<ny_in; j++) {
+    for(int i=0; i<nx_in; i++) {
+      double x1_in[50], y1_in[50], lon_in_avg, clon, clat;
+      int    n, n0, n1, n2, n3, n1_in, ii;
 
-        ii = j*nx_in + i;
-        if(cellm_area[ii] > 0) {
-          if( fabs(cellm_area[ii]-grid_area[ii])/grid_area[ii] < AREA_RATIO ) {
-            cellm_clon[ii] /= cellm_area[ii];
-            cellm_clat[ii] /= cellm_area[ii];
-          }
-          else {
-            n0 = j*(nx_in+1)+i;       n1 = j*(nx_in+1)+i+1;
-            n2 = (j+1)*(nx_in+1)+i+1; n3 = (j+1)*(nx_in+1)+i;
-            x1_in[0] = lonc[n0]; y1_in[0] = latc[n0];
-            x1_in[1] = lonc[n1]; y1_in[1] = latc[n1];
-            x1_in[2] = lonc[n2]; y1_in[2] = latc[n2];
-            x1_in[3] = lonc[n3]; y1_in[3] = latc[n3];
-            n1_in = fix_lon(x1_in, y1_in, 4, M_PI);
-            lon_in_avg = avgval_double(n1_in, x1_in);
-            clon = poly_ctrlon(x1_in, y1_in, n1_in, lon_in_avg);
-            clat = poly_ctrlat (x1_in, y1_in, n1_in );
-            cellm_clon[ii] = clon/grid_area[ii];
-            cellm_clat[ii] = clat/grid_area[ii];
-          }
+      ii = j*nx_in + i;
+      if(cellm_area[ii] > 0) {
+        if( fabs(cellm_area[ii]-grid_area[ii])/grid_area[ii] < AREA_RATIO ) {
+          cellm_clon[ii] /= cellm_area[ii];
+          cellm_clat[ii] /= cellm_area[ii];
+        }
+        else {
+          n0 = j*(nx_in+1)+i;       n1 = j*(nx_in+1)+i+1;
+          n2 = (j+1)*(nx_in+1)+i+1; n3 = (j+1)*(nx_in+1)+i;
+          x1_in[0] = lonc[n0]; y1_in[0] = latc[n0];
+          x1_in[1] = lonc[n1]; y1_in[1] = latc[n1];
+          x1_in[2] = lonc[n2]; y1_in[2] = latc[n2];
+          x1_in[3] = lonc[n3]; y1_in[3] = latc[n3];
+          n1_in = fix_lon(x1_in, y1_in, 4, M_PI);
+          lon_in_avg = avgval_double(n1_in, x1_in);
+          clon = poly_ctrlon(x1_in, y1_in, n1_in, lon_in_avg);
+          clat = poly_ctrlat (x1_in, y1_in, n1_in );
+          cellm_clon[ii] = clon/grid_area[ii];
+          cellm_clat[ii] = clat/grid_area[ii];
         }
       }
     }
-//for(n=0; n<ntiles_out; n++) {
-//    for(i=0; i<interp[n].nxgrid; i++) {
-//      tile = interp[n].t_in[i];
-//      ii   = interp[n].j_in[i] * grid_in[tile].nx + interp[n].i_in[i];
-//      interp[n].di_in[i] -= cell_in[tile].clon[ii];
-//      interp[n].dj_in[i] -= cell_in[tile].clat[ii];
-//    }
-//  }
+  }
+}
 
-  /* free the memory */
-//  for(n=0; n<ntiles_in; n++) {
-//    free(cell_in[n].area);
-//    free(cell_in[n].clon);
-//    free(cell_in[n].clat);
-//  }
-//  free(cell_in);
+/*******************************************************************************
+  void get_interp_acc
+********************************************************************************/
+void get_interp_acc(const int n, const int ntiles_in, const int nx_in, const int ny_in,
+                    Interp_config *interp, Interp_config *tmp_interp, CellStruct *cell_in)
+{
 
+  int nxgrid;
+  int *i_in, *j_in, *i_out, *j_out, *t_in;
+  double *area, *di_in, *dj_in;
+  Interp_config *pinterp;
 
+  //copy over interp from interp_tmp
+  nxgrid = interp[n].nxgrid;
+  interp[n].i_in = (int *)malloc(nxgrid*sizeof(int));
+  interp[n].j_in = (int *)malloc(nxgrid*sizeof(int));
+  interp[n].i_out = (int *)malloc(nxgrid*sizeof(int));
+  interp[n].j_out = (int *)malloc(nxgrid*sizeof(int));
+  interp[n].area = (double *)malloc(nxgrid*sizeof(double));
+  interp[n].t_in = (int *)malloc(nxgrid*sizeof(int));
+  interp[n].di_in = (double *)malloc(nxgrid*sizeof(double));
+  interp[n].dj_in = (double *)malloc(nxgrid*sizeof(double));
+  pinterp = interp+n;
+  i_in = interp[n].i_in;
+  j_in = interp[n].j_in;
+  i_out = interp[n].i_out;
+  j_out = interp[n].j_out;
+  area = interp[n].area;
+  t_in = interp[n].t_in;
+  di_in = interp[n].di_in;
+  dj_in = interp[n].dj_in;
+
+#pragma acc enter data create(pinterp)
+#pragma acc enter data create(i_in[0:nxgrid], j_in[0:nxgrid],   \
+                              i_out[0:nxgrid],j_out[0:nxgrid],  \
+                              t_in[0:nxgrid], di_in[0:nxgrid],  \
+                              dj_in[0:nxgrid], area[0:nxgrid])
+  //#pragma acc enter data copyin(interp[n].nxgrid)
+
+  for(int m=0 ; m<ntiles_in ; m++){
+    int start=0;
+    int *i_in2, *j_in2, *i_out2, *j_out2, *t_in2, tmp_nxgrid;
+    double *area2, *di_in2, *dj_in2;
+    Interp_config *pinterp2;
+
+    double *cellm_area, *cellm_clon, *cellm_clat;
+    CellStruct *cellm;
+
+    for( int mm=0 ; mm<m; mm++) start+=tmp_interp[mm].nxgrid;
+
+    pinterp2 = tmp_interp+m;
+    i_in2 = tmp_interp[m].i_in;
+    j_in2 = tmp_interp[m].j_in;
+    i_out2 = tmp_interp[m].i_out;
+    j_out2 = tmp_interp[m].j_out;
+    t_in2 = tmp_interp[m].t_in;
+    area2 = tmp_interp[m].area;
+    di_in2 = tmp_interp[m].di_in;
+    dj_in2 = tmp_interp[m].dj_in;
+    tmp_nxgrid = tmp_interp[m].nxgrid ;
+
+    cellm = cell_in+m;
+    cellm_area = cell_in[m].area;
+    cellm_clon = cell_in[m].clon;
+    cellm_clat = cell_in[m].clat;
+#pragma acc data present(pinterp2)
+#pragma acc data present(i_in2[0:tmp_nxgrid], j_in2[0:tmp_nxgrid],   \
+                         i_out2[0:tmp_nxgrid], j_out2[0:tmp_nxgrid], \
+                         area2[0:tmp_nxgrid], di_in2[0:tmp_nxgrid],  \
+                         dj_in2[0:tmp_nxgrid], t_in2[0:tmp_nxgrid])
+#pragma acc data present(pinterp)
+#pragma acc data present(cellm)
+#pragma acc data present(cellm_area[0:nx_in*ny_in],   \
+                         cellm_clon[0:nx_in*ny_in],   \
+                         cellm_clat[0:nx_in*ny_in])
+#pragma acc data present(i_in[0:nxgrid], j_in[0:nxgrid],  \
+                         i_out[0:nxgrid],j_out[0:nxgrid], \
+                         t_in[0:nxgrid], di_in[0:nxgrid], \
+                         dj_in[0:nxgrid], area[0:nxgrid])
+#pragma acc data copyin(start, tmp_nxgrid, nx_in, ny_in)
+#pragma acc parallel loop
+    for (int ixgrid=0 ; ixgrid<tmp_nxgrid ; ixgrid++) {
+      int ii;
+      ii   = j_in2[ixgrid] * nx_in + i_in2[ixgrid];
+      i_in[start+ixgrid] = i_in2[ixgrid];
+      j_in[start+ixgrid] = j_in2[ixgrid];
+      i_out[start+ixgrid] = i_out2[ixgrid];
+      j_out[start+ixgrid] = j_out2[ixgrid];
+      t_in[start+ixgrid] = t_in2[ixgrid];
+      di_in[start+ixgrid] = di_in2[ixgrid] - cellm_clon[ii];
+      dj_in[start+ixgrid] = dj_in2[ixgrid] - cellm_clat[ii];
+      area[start+ixgrid] = area2[ixgrid];
+    }
+#pragma acc exit data delete(i_in2[0:tmp_nxgrid], j_in2[0:tmp_nxgrid],  \
+                             i_out2[0:tmp_nxgrid], j_out2[0:tmp_nxgrid], \
+                             area2[0:tmp_nxgrid], di_in2[0:tmp_nxgrid], \
+                             dj_in2[0:tmp_nxgrid], pinterp2)
+#pragma acc exit data delete(cellm_area[0:nx_in*ny_in],         \
+                             cellm_clon[0:nx_in*ny_in],         \
+                             cellm_clat[0:nx_in*ny_in], cellm)
+    free(tmp_interp[m].i_in);
+    free(tmp_interp[m].j_in);
+    free(tmp_interp[m].i_out);
+    free(tmp_interp[m].j_out);
+    free(tmp_interp[m].area);
+    free(tmp_interp[m].di_in);
+    free(tmp_interp[m].dj_in);
+    free(cell_in[m].area);
+    free(cell_in[m].clon);
+    free(cell_in[m].clat);
+
+  }
 }
