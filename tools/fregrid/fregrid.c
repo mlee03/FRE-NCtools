@@ -1070,11 +1070,11 @@ int main(int argc, char* argv[])
             if (opcode & MONOTONIC)
               do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
             else
-#ifdef _OPENACC
+              //#ifdef _OPENACC
               do_scalar_conserve_order2_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-#else
-              do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-#endif
+        //#else
+        //    do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+        //#endif
           else
             do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
         if(debug) {

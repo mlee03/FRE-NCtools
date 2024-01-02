@@ -768,7 +768,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 #pragma acc atomic write
             out_area[n0] += area;
 #pragma acc atomic write
-            out_miss[n0] += 1;
+            out_miss[n0] = 1;
           } //if missing
         } //nxgrid
       }//itile
@@ -875,19 +875,19 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
           pfieldin_area = field_in[itile].area;
 
 
-#pragma acc data present( pi_in[0:nxgrid], pj_in[0:nxgrid])
+#pragma acc data present( pi_in[0:nxgrid], pj_in[0:nxgrid], pi_out[0:nxgrid], pj_out[0:nxgrid])
 #pragma acc data present(parea[0:nxgrid], out_area[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz])
+#pragma acc data present( start_here[0:ntiles_in], end_here[0:ntiles_in] )
 #pragma acc data copyin(pgridin_area[0:nx2*ny2], pfieldin_area[0:nx2*ny2])
 #pragma acc parallel loop
-          for(int n=0 ; n<nxgrid ; n++) {
+          for(int n=start_here[itile] ; n<end_here[itile] ; n++) {
             i1 = pi_in[n];
-            j1 = pi_in[n];
+            j1 = pj_in[n];
             i2 = pi_out[n];
             j2 = pj_out[n];
             area = parea[n];
             n0 = j2*nx2+i2;
             n1 = j1*nx1+i1;
-
             if(cell_measures )
 #pragma acc atomic write
               out_area[n0] += (area*pfieldin_area[n1]/pgridin_area[n1]);
@@ -896,17 +896,17 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
               out_area[n0] += area;
           }
         }
-      }
 
-      pcell_area = grid_out[m].cell_area;
+        pcell_area = grid_out[m].cell_area;
 
 #pragma acc data copyin(pcell_area[0:nx2*ny2])
 #pragma acc data present(out_area[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz])
 #pragma acc loop
-      for(i=0; i<nx2*ny2*nz; i++) {
-        if(pdata_out[i] != missing) {
-          i2 = i%(nx2*ny2);
-          pdata_out[i] *=  (out_area[i2]/pcell_area[i2]);
+        for(i=0; i<nx2*ny2*nz; i++) {
+          if(pdata_out[i] != missing) {
+            i2 = i%(nx2*ny2);
+            pdata_out[i] *=  (out_area[i2]/pcell_area[i2]);
+          }
         }
       }
     }
