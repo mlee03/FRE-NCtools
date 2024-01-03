@@ -672,6 +672,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
       out_area[i] = 0.0;
       out_miss[i] = 0;
     }
+#pragma acc enter data copyin( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz])
 
     pinterp =interp+m;
     pi_out = interp[m].i_out;
@@ -683,6 +684,8 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
     pt_in = interp[m].t_in;
     parea = interp[m].area;
     pdata_out = field_out[m].data;
+
+#pragma acc enter data copyin(pdata_out[0:nx2*ny2*nz])
 
     //get indices
     itile_nxgrid = (int *)calloc(ntiles_in, sizeof(int));
@@ -708,7 +711,6 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 #pragma acc exit data delete(itile_nxgrid[0:ntiles_in])
     free(itile_nxgrid);
 
-#pragma acc enter data copyin( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz] )
 
     if(has_missing) {
 
@@ -733,7 +735,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 #pragma acc data copyin( pweight[0:nx1*ny1], pgrad_mask[0:nx1*ny1*nz])
 #pragma acc data copyin( pfieldin_area[0:nx1*ny1], pgridin_area[0:nx1*ny1])
 #pragma acc data copyin( nx2, ny2)
-#pragma acc parallel loop
+#pragma acc parallel loop private(i2, j2, i1, j1, n2, n1, n0, area, di, dj, n)
         for(n=start_here[itile]; n<end_here[itile]; n++) {
           i2   = pi_out[n];
           j2   = pj_out[n];
@@ -758,16 +760,15 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
               area *= (pfieldin_area[n1]/pgridin_area[n1]);
             }
             if(pgrad_mask[n1]) { /* use zero gradient */
-#pragma acc atomic write
+#pragma acc atomic update
               pdata_out[n0]  += pdata_in[n2]*area;
             }
             else {
-#pragma acc atomic write
+#pragma acc atomic update
               pdata_out[n0] += (pdata_in[n2]+pgrad_x[n1]*di +pgrad_y[n1]*dj)*area;
             }
-#pragma acc atomic write
+#pragma acc atomic update
             out_area[n0] += area;
-#pragma acc atomic write
             out_miss[n0] = 1;
           } //if missing
         } //nxgrid
@@ -794,7 +795,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 #pragma acc data copyin( pdata_in[0:(nx1+2*halo)*(ny1+2*halo)*nz], pgrad_x[0:nx1*ny1*nz], pgrad_y[0:nx1*ny1*nz])
 #pragma acc data copyin( pweight[0:nx1*ny1])
 #pragma acc data copyin( pfieldin_area[0:nx1*ny1], pgridin_area[0:nx1*ny1])
-#pragma acc parallel loop
+#pragma acc parallel loop private(n, k, i2, j2, i1, j1, area, n0, n1, n2, di, dj)
         for(n=start_here[itile]; n<end_here[itile]; n++) {
 
           i2   = pi_out[n];
@@ -815,17 +816,15 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
               area /= pgridin_area[n1];
             else if( cell_measures )
               area *= (pfieldin_area[n1]/pgridin_area[n1]);
-#pragma acc atomic write
+#pragma acc atomic update
             pdata_out[n0] += (pdata_in[n2]+pgrad_x[n1]*di+pgrad_y[n1]*dj)*area;
-#pragma acc atomic write
+#pragma acc atomic update
             out_area[n0] += area;
-#pragma acc atomic write
             out_miss[n0] = 1;
           } //for kz
         } // nxgrd
       } //itile
     } //if
-
 
 
     if(opcode & CHECK_CONSERVE) {
@@ -879,7 +878,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 #pragma acc data present(parea[0:nxgrid], out_area[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz])
 #pragma acc data present( start_here[0:ntiles_in], end_here[0:ntiles_in] )
 #pragma acc data copyin(pgridin_area[0:nx2*ny2], pfieldin_area[0:nx2*ny2])
-#pragma acc parallel loop
+#pragma acc parallel loop private( i2, j2, i1, j1, n0, n1, area )
           for(int n=start_here[itile] ; n<end_here[itile] ; n++) {
             i1 = pi_in[n];
             j1 = pj_in[n];
@@ -889,10 +888,10 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
             n0 = j2*nx2+i2;
             n1 = j1*nx1+i1;
             if(cell_measures )
-#pragma acc atomic write
+#pragma acc atomic update
               out_area[n0] += (area*pfieldin_area[n1]/pgridin_area[n1]);
             else
-#pragma acc atomic write
+#pragma acc atomic update
               out_area[n0] += area;
           }
         }
@@ -901,7 +900,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 
 #pragma acc data copyin(pcell_area[0:nx2*ny2])
 #pragma acc data present(out_area[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz])
-#pragma acc loop
+#pragma acc parallel loop
         for(i=0; i<nx2*ny2*nz; i++) {
           if(pdata_out[i] != missing) {
             i2 = i%(nx2*ny2);
