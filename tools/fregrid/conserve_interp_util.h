@@ -22,7 +22,7 @@
 #include "globals.h"
 
 void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
-                      Interp_config *interp, unsigned int opcode);
+                      Interp_config *interp, unsigned int opcode, int *nxgrid_per_input_tile);
 
 void malloc_xgrid_arrays( int nsize, int **i_in, int **j_in, int **i_out, int **j_out,
                           double **xgrid_area, double **xgrid_clon, double **xgrid_clat );
@@ -46,7 +46,7 @@ void get_interp_dij_acc(const int m, const int nx_in, const int ny_in, const dou
                         const double *latc, const double *lonc, CellStruct *cellin_m);
 
 void get_interp_acc(const int n, const int ntiles_in, Grid_config *grid_in,
-                    Interp_config *interp, Interp_config *tmp_interp, CellStruct *cell_in);
+                    Interp_config *interp, Interp_config *tmp_interp, CellStruct *cell_in, int *nxgrid_per_input_tile);
 
 void write_remap(const int ntiles_out, Grid_config *grid_out, Interp_config *interp, unsigned int opcode);
 

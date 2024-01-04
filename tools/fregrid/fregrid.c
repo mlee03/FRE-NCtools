@@ -360,6 +360,8 @@ int main(int argc, char* argv[])
   double time_setup_interp=0, time_do_interp=0, time_write=0;
   clock_t time_start, time_end;
 
+  int *nxgrid_per_input_tile;
+
   int errflg = (argc == 1);
   int fid;
 
@@ -972,7 +974,8 @@ int main(int argc, char* argv[])
     setup_bilinear_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode, dlon_in, dlat_in, lonbegin_in, latbegin_in );
   }
   else
-    setup_conserve_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode);
+    nxgrid_per_input_tile = (int *)malloc(ntiles_in*sizeof(int));
+  setup_conserve_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode, nxgrid_per_input_tile);
    if(debug) {
      time_end = clock();
      time_setup_interp = 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
@@ -1071,7 +1074,8 @@ int main(int argc, char* argv[])
               do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
             else
               //#ifdef _OPENACC
-              do_scalar_conserve_order2_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+              do_scalar_conserve_order2_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1,
+                                               nxgrid_per_input_tile);
         //#else
         //    do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
         //#endif

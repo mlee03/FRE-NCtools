@@ -46,7 +46,7 @@
   Setup the interpolation weight for conservative interpolation
 *******************************************************************************/
 void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles_out,
-         Grid_config *grid_out, Interp_config *interp, unsigned int opcode)
+                           Grid_config *grid_out, Interp_config *interp, unsigned int opcode, int *nxgrid_per_input_tile)
 {
   int    n, m, i, ii, jj, nx_in, ny_in, nx_out, ny_out, tile;
   size_t nxgrid, nxgrid2;
@@ -71,7 +71,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   //#endif
 
   if( opcode & READ) {
-    read_remap_file(ntiles_in,ntiles_out, grid_out, interp, opcode);
+    read_remap_file(ntiles_in,ntiles_out, grid_out, interp, opcode, nxgrid_per_input_tile);
   }
   else {
 
@@ -123,22 +123,27 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 #endif
 
 #ifdef _OPENACC
-      get_interp_acc(n, ntiles_in, grid_in, interp, tmp_interp, cell_in);
-      i_in = interp[n].i_in;
-      j_in = interp[n].j_in;
-      i_out = interp[n].i_out;
-      j_out = interp[n].j_out;
-      area = interp[n].area;
-      t_in = interp[n].t_in;
-      di_in = interp[n].di_in;
-      dj_in = interp[n].dj_in;
 
-#endif
+      if( opcode & READ) {
+      }
+      else {
+        get_interp_acc(n, ntiles_in, grid_in, interp, tmp_interp, cell_in, nxgrid_per_input_tile);
+        i_in = interp[n].i_in;
+        j_in = interp[n].j_in;
+        i_out = interp[n].i_out;
+        j_out = interp[n].j_out;
+        area = interp[n].area;
+        t_in = interp[n].t_in;
+        di_in = interp[n].di_in;
+        dj_in = interp[n].dj_in;
+      }
       nxgrid = interp[n].nxgrid;
 #pragma acc update host(i_in[0:nxgrid], j_in[0:nxgrid],   \
                         i_out[0:nxgrid], j_out[0:nxgrid], \
                         t_in[0:nxgrid], di_in[0:nxgrid], \
                         dj_in[0:nxgrid], area[0:nxgrid])
+
+#endif
 
     } // ntiles_out
 
@@ -614,7 +619,7 @@ void do_scalar_conserve_interp(Interp_config *interp, int varid, int ntiles_in, 
 *******************************************************************************/
 void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntiles_in, const Grid_config *grid_in,
              int ntiles_out, const Grid_config *grid_out, const Field_config *field_in,
-             Field_config *field_out, unsigned int opcode, int nz)
+                                      Field_config *field_out, unsigned int opcode, int nz, int *nxgrid_per_input_tile)
 {
   int nx1, ny1, nx2, ny2, i1, j1, i2, j2, tile, n, m, i, j, n1, n2;
   int k, n0;
@@ -692,22 +697,29 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
     start_here = (int *)calloc(ntiles_in, sizeof(int));
     end_here = (int *)calloc(ntiles_in, sizeof(int));
 #pragma acc enter data copyin(itile_nxgrid[0:ntiles_in], start_here[0:ntiles_in], end_here[0:ntiles_in])
-
-#pragma acc data present( pt_in[0:nxgrid] )
+#pragma acc enter data copyin(nxgrid_per_input_tile[0:ntiles_in])
 #pragma acc parallel loop
-    for( int itile=0 ; itile<ntiles_in ; itile++ ) {
-      int icount=0;
-#pragma acc loop reduction(+:icount)
-      for( n=0 ; n<nxgrid ; n++ ){
-        if( pt_in[n] == itile ) icount++;
-      }
-      itile_nxgrid[itile] = icount;
-    }
-#pragma acc parallel loop seq
     for(int itile=0 ; itile<ntiles_in ; itile++){
-      for( int ii=0 ; ii<itile ; ii++) start_here[itile] += itile_nxgrid[ii];
-      end_here[itile] = start_here[itile] + itile_nxgrid[itile];
+      for( int ii=0 ; ii<itile ; ii++) start_here[itile] += nxgrid_per_input_tile[ii];
+      end_here[itile] = start_here[itile] + nxgrid_per_input_tile[itile];
     }
+
+    //#pragma acc data present( pt_in[0:nxgrid] )
+    //#pragma acc parallel loop
+    //    for( int itile=0 ; itile<ntiles_in ; itile++ ) {
+    //      int icount=0;
+    //#pragma acc loop reduction(+:icount)
+    //for( n=0 ; n<nxgrid ; n++ ){
+    //  if( pt_in[n] == itile ) icount++;
+    //}
+    //printf("HEREHERE %d, %d\n", nxgrid_per_input_tile[itile], icount);
+    //itile_nxgrid[itile] = icount;
+    //}
+    //#pragma acc parallel loop seq
+    //for(int itile=0 ; itile<ntiles_in ; itile++){
+    //for( int ii=0 ; ii<itile ; ii++) start_here[itile] += itile_nxgrid[ii];
+    //end_here[itile] = start_here[itile] + itile_nxgrid[itile];
+    //}
 #pragma acc exit data delete(itile_nxgrid[0:ntiles_in])
     free(itile_nxgrid);
 
@@ -914,7 +926,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
     free(out_miss);
     free(start_here);
     free(end_here);
-#pragma acc exit data delete( start_here[0:ntiles_in], end_here[0:ntiles_in] )
+#pragma acc exit data delete( start_here[0:ntiles_in], end_here[0:ntiles_in], nxgrid_per_input_tile[0:ntiles_in] )
 #pragma acc exit data copyout(pdata_out[0:nx2*ny2*nz])
 #pragma acc exit data delete(out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz])
 

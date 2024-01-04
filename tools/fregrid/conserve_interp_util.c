@@ -39,7 +39,7 @@
   Reads in the weight/remap file if provided
 *******************************************************************************/
 void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
-          Interp_config *interp, unsigned int opcode){
+                      Interp_config *interp, unsigned int opcode, int *nxgrid_per_input_tile){
 
   int *i_in=NULL, *j_in=NULL, *i_out=NULL, *j_out=NULL;
   double *xgrid_area=NULL, *tmp_area=NULL, *xgrid_clon=NULL, *xgrid_clat=NULL;
@@ -47,6 +47,12 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
   int zero=0;
   size_t nxgrid;
   double garea;
+
+  Interp_config *pinterp;
+  int isc, jsc, iec, jec, tmp_nxgrid;
+  int *pt_in, *pi_in, *pj_in, *pi_out, *pj_out;
+  double *parea;
+  double *pdi_in, *pdj_in;
 
   garea = 4*M_PI*RADIUS*RADIUS;
 
@@ -65,56 +71,111 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
         read_mosaic_xgrid_order2(interp[n].remap_file, i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat);
 
       /*--- rescale the xgrid area */
+#pragma acc enter data create(xgrid_area[0:nxgrid])
+#pragma acc data present(xgrid_area[0:nxgrid]) copyin(garea)
+#pragma acc parallel loop
       for(i=0; i<nxgrid; i++) xgrid_area[i] *= garea;
+
       fid = mpp_open(interp[n].remap_file, MPP_READ);
       vid = mpp_get_varid(fid, "tile1");
       mpp_get_var_value(fid, vid, t_in);
       mpp_close(fid);
       /*distribute the exchange grid on each pe according to target grid index*/
+      tmp_nxgrid=0;
       interp[n].nxgrid = 0;
+      isc = grid_out[n].isc;
+      jsc = grid_out[n].jsc;
+      jec = grid_out[n].jec;
+      iec = grid_out[n].iec;
+#pragma acc enter data copyin(i_out[0:nxgrid], j_out[0:nxgrid])
+#pragma acc enter data create(ind[0:nxgrid])
+#pragma acc data copyin(isc, jsc, iec, jec, nxgrid) present(i_out[0:nxgrid], j_out[0:nxgrid], ind[0:nxgrid]) copy(tmp_nxgrid)
+#pragma acc parallel loop
       for(i=0; i<nxgrid; i++) {
-        if( i_out[i] <= grid_out[n].iec && i_out[i] >= grid_out[n].isc &&
-            j_out[i] <= grid_out[n].jec && j_out[i] >= grid_out[n].jsc )
-          ind[interp[n].nxgrid++] = i;
+        if( i_out[i] <= iec && i_out[i] >= isc &&
+            j_out[i] <= jec && j_out[i] >= jsc )
+          ind[tmp_nxgrid++] = i;
       }
+      interp[n].nxgrid = tmp_nxgrid;
+      printf("HERE %d %d\n", interp[n].nxgrid, nxgrid);
+      exit(1);
+
       interp[n].i_in   = (int    *)malloc(interp[n].nxgrid*sizeof(int   ));
       interp[n].j_in   = (int    *)malloc(interp[n].nxgrid*sizeof(int   ));
       interp[n].i_out  = (int    *)malloc(interp[n].nxgrid*sizeof(int   ));
       interp[n].j_out  = (int    *)malloc(interp[n].nxgrid*sizeof(int   ));
       interp[n].area   = (double *)malloc(interp[n].nxgrid*sizeof(double));
       interp[n].t_in   = (int    *)malloc(interp[n].nxgrid*sizeof(int   ));
-
-      for(i=0; i< interp[n].nxgrid; i++) {
-        interp[n].i_in [i] = i_in [ind[i]];
-        interp[n].j_in [i] = j_in [ind[i]];
-        interp[n].t_in [i] = t_in [ind[i]] - 1;
-        interp[n].i_out[i] = i_out[ind[i]] - grid_out[n].isc;
-        interp[n].j_out[i] = j_out[ind[i]] - grid_out[n].jsc;
-        interp[n].area [i] = xgrid_area[ind[i]];
-      }
       if(opcode & CONSERVE_ORDER2) {
         interp[n].di_in   = (double *)malloc(interp[n].nxgrid*sizeof(double));
         interp[n].dj_in   = (double *)malloc(interp[n].nxgrid*sizeof(double));
-        for(i=0; i< interp[n].nxgrid; i++) {
-          interp[n].di_in[i] = xgrid_clon[ind[i]];
-          interp[n].dj_in[i] = xgrid_clat[ind[i]];
+      }
+
+      pinterp = interp+n;
+      pi_in = interp[n].i_in;
+      pj_in = interp[n].j_in;
+      pi_out = interp[n].i_out;
+      pj_out = interp[n].j_out;
+      parea = interp[n].area;
+      pt_in = interp[n].t_in;
+      pdi_in = interp[n].di_in;
+      pdj_in = interp[n].dj_in;
+
+#pragma acc enter data create(pinterp)
+#pragma acc enter data create(pi_in[0:nxgrid], pj_in[0:nxgrid], pi_out[0:nxgrid], pj_out[0:nxgrid],\
+                             pt_in[0:nxgrid], parea[0:nxgrid], pdi_in[0:nxgrid], pdj_in[0:nxgrid])
+      //#pragma acc enter data copyin(interp[n].nxgrid)
+#pragma acc data copyin( i_in[0:nxgrid], j_in[0:nxgrid],t_in[0:nxgrid] )
+#pragma acc data present(ind[0:nxgrid], i_out[0:nxgrid], j_out[0:nxgrid], xgrid_area[0:nxgrid])
+#pragma acc data copyin( isc, jsc )
+#pragma acc parallel loop
+      for(i=0; i< nxgrid; i++) {
+        pi_in [i] = i_in [ind[i]];
+        pj_in [i] = j_in [ind[i]];
+        pt_in [i] = t_in [ind[i]] - 1;
+        pi_out[i] = i_out[ind[i]] - isc;
+        pj_out[i] = j_out[ind[i]] - jsc;
+        parea [i] = xgrid_area[ind[i]];
+      }
+      if(opcode & CONSERVE_ORDER2) {
+#pragma acc data present(pdi_in[0:nxgrid], pdj_in[0:nxgrid], ind[0:nxgrid])
+#pragma acc data copyin(xgrid_clon[0:nxgrid], xgrid_clat[0:nxgrid])
+#pragma acc parallel loop
+        for(i=0; i< nxgrid; i++) {
+          pdi_in[i] = xgrid_clon[ind[i]];
+          pdj_in[i] = xgrid_clat[ind[i]];
         }
       }
+#pragma acc exit data delete(xgrid_area[0:nxgrid], ind[0:nxgrid], i_out[0:nxgrid], j_out[0:nxgrid])
+
+#ifdef _OPENACC
+#pragma acc enter data create(nxgrid_per_input_tile[0:ntiles_in])
+#pragma acc data copy(nxgrid) present(pt_in[0:nxgrid])
+#pragma acc parallel loop
+      for( int itile=0 ; itile<ntiles_in ; itile++ ) {
+        int icount=0;
+#pragma acc loop reduction(+:icount)
+        for( i=0 ; i<nxgrid ; i++ ){
+          if( pt_in[i] == itile ) icount++;
+        }
+        nxgrid_per_input_tile[itile] = icount;
+      }
+#endif
+
       free(t_in);
       free(ind);
       malloc_xgrid_arrays(zero, &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon, &xgrid_clat);
 
     }//if read from file
 
-#pragma acc enter data copyin( interp[n] )
-#pragma acc enter data copyin( interp[n].i_in[0:nxgrid], interp[n].j_in[0:nxgrid], \
-                               interp[n].i_out[0:nxgrid], interp[n].j_out[0:nxgrid], \
-                               interp[n].area[0:nxgrid], \
-                               interp[n].t_in[0:nxgrid], interp[n].nxgrid)
+    //#pragma acc enter data copyin( interp[n] )
+    //#pragma acc enter data copyin( interp[n].i_in[0:nxgrid], interp[n].j_in[0:nxgrid], \
+    //                         interp[n].i_out[0:nxgrid], interp[n].j_out[0:nxgrid], \
+    //                       interp[n].area[0:nxgrid], interp[n].nxgrid)
 
-    if(opcode & CONSERVE_ORDER2) {
-#pragma acc enter data copyin( interp[n].di_in[0:nxgrid], interp[n].dj_in[0:nxgrid])
-    }
+    //if(opcode & CONSERVE_ORDER2) {
+    //#pragma acc enter data copyin( interp[n].di_in[0:nxgrid], interp[n].dj_in[0:nxgrid])
+    //}
 
   } // ntiles
   if(mpp_pe() == mpp_root_pe())printf("NOTE: Finish reading index and weight for conservative interpolation from file.\n");
@@ -430,7 +491,7 @@ void get_interp_dij_acc(const int m, const int nx_in, const int ny_in, const dou
   void get_interp_acc
 ********************************************************************************/
 void get_interp_acc(const int n, const int ntiles_in, Grid_config *grid_in,
-                    Interp_config *interp, Interp_config *tmp_interp, CellStruct *cell_in)
+                    Interp_config *interp, Interp_config *tmp_interp, CellStruct *cell_in, int *nxgrid_per_input_tile)
 {
 
   int nxgrid, nx_in, ny_in;
@@ -494,6 +555,9 @@ void get_interp_acc(const int n, const int ntiles_in, Grid_config *grid_in,
     cellm_area = cell_in[m].area;
     cellm_clon = cell_in[m].clon;
     cellm_clat = cell_in[m].clat;
+
+    nxgrid_per_input_tile[m]=tmp_nxgrid;
+
 #pragma acc data present(pinterp2)
 #pragma acc data present(i_in2[0:tmp_nxgrid], j_in2[0:tmp_nxgrid],   \
                          i_out2[0:tmp_nxgrid], j_out2[0:tmp_nxgrid], \
