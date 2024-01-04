@@ -165,15 +165,6 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
 
     }//if read from file
 
-    //#pragma acc enter data copyin( interp[n] )
-    //#pragma acc enter data copyin( interp[n].i_in[0:nxgrid], interp[n].j_in[0:nxgrid], \
-    //                         interp[n].i_out[0:nxgrid], interp[n].j_out[0:nxgrid], \
-    //                       interp[n].area[0:nxgrid], interp[n].nxgrid)
-
-    //if(opcode & CONSERVE_ORDER2) {
-    //#pragma acc enter data copyin( interp[n].di_in[0:nxgrid], interp[n].dj_in[0:nxgrid])
-    //}
-
   } // ntiles
   if(mpp_pe() == mpp_root_pe())printf("NOTE: Finish reading index and weight for conservative interpolation from file.\n");
 

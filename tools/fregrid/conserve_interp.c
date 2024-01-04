@@ -657,7 +657,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
   double *pfieldin_area;
   Interp_config *pinterp;
 
-  int *itile_nxgrid, *start_here, *end_here;
+  int *start_here, *end_here;
 
   gsum_out = 0;
   interp_method = field_in->var[varid].interp_method;
@@ -707,35 +707,15 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 #pragma acc enter data copyin(pdata_out[0:nx2*ny2*nz])
 
     //get indices
-    itile_nxgrid = (int *)calloc(ntiles_in, sizeof(int));
     start_here = (int *)calloc(ntiles_in, sizeof(int));
     end_here = (int *)calloc(ntiles_in, sizeof(int));
-#pragma acc enter data copyin(itile_nxgrid[0:ntiles_in], start_here[0:ntiles_in], end_here[0:ntiles_in])
+#pragma acc enter data copyin(start_here[0:ntiles_in], end_here[0:ntiles_in])
 #pragma acc data present(nxgrid_per_input_tile[0:ntiles_in])
 #pragma acc parallel loop
     for(int itile=0 ; itile<ntiles_in ; itile++){
       for( int ii=0 ; ii<itile ; ii++) start_here[itile] += nxgrid_per_input_tile[ii];
       end_here[itile] = start_here[itile] + nxgrid_per_input_tile[itile];
     }
-
-    //#pragma acc data present( pt_in[0:nxgrid] )
-    //#pragma acc parallel loop
-    //    for( int itile=0 ; itile<ntiles_in ; itile++ ) {
-    //      int icount=0;
-    //#pragma acc loop reduction(+:icount)
-    //for( n=0 ; n<nxgrid ; n++ ){
-    //  if( pt_in[n] == itile ) icount++;
-    //}
-    //printf("HEREHERE %d, %d\n", nxgrid_per_input_tile[itile], icount);
-    //itile_nxgrid[itile] = icount;
-    //}
-    //#pragma acc parallel loop seq
-    //for(int itile=0 ; itile<ntiles_in ; itile++){
-    //for( int ii=0 ; ii<itile ; ii++) start_here[itile] += itile_nxgrid[ii];
-    //end_here[itile] = start_here[itile] + itile_nxgrid[itile];
-    //}
-#pragma acc exit data delete(itile_nxgrid[0:ntiles_in])
-    free(itile_nxgrid);
 
 
     if(has_missing) {
@@ -781,7 +761,6 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
             else if( cell_measures ) {
               if(pfieldin_area[n1] == area_missing) {
                 printf("name=%s,tile=%d,i1,j1=%d,%d,i2,j2=%d,%d\n",field_in->var[varid].name,tile,i1,j1,i2,j2);
-                //mpp_error("conserve_interp: data is not missing but area is missing");
               }
               area *= (pfieldin_area[n1]/pgridin_area[n1]);
             }
@@ -921,6 +900,23 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
               out_area[n0] += area;
           }
         }
+
+          //          for(int n=start_here[itile] ; n<end_here[itile] ; n++) {
+          //i1 = pi_in[n];
+          //j1 = pj_in[n];
+          //i2 = pi_out[n];
+          //j2 = pj_out[n];
+          //area = parea[n];
+          //n0 = j2*nx2+i2;
+          //n1 = j1*nx1+i1;
+          //if(cell_measures )
+          //#pragma acc atomic update
+          //  out_area[n0] += (area*pfieldin_area[n1]/pgridin_area[n1]);
+          //else
+          //#pragma acc atomic update
+          //  out_area[n0] += area;
+          //}
+          //}
 
         pcell_area = grid_out[m].cell_area;
 
