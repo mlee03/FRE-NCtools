@@ -901,22 +901,6 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
           }
         }
 
-          //          for(int n=start_here[itile] ; n<end_here[itile] ; n++) {
-          //i1 = pi_in[n];
-          //j1 = pj_in[n];
-          //i2 = pi_out[n];
-          //j2 = pj_out[n];
-          //area = parea[n];
-          //n0 = j2*nx2+i2;
-          //n1 = j1*nx1+i1;
-          //if(cell_measures )
-          //#pragma acc atomic update
-          //  out_area[n0] += (area*pfieldin_area[n1]/pgridin_area[n1]);
-          //else
-          //#pragma acc atomic update
-          //  out_area[n0] += area;
-          //}
-          //}
 
         pcell_area = grid_out[m].cell_area;
 
