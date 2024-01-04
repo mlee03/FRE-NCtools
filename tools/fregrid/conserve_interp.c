@@ -58,6 +58,9 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   double time_nxgrid=0;
   clock_t time_start, time_end;
 
+  int *i_in, *j_in, *i_out, *j_out, *t_in;
+  double *area, *di_in, *dj_in;
+
   //#ifdef _OPENACC
   Minmaxavg_lists out_minmaxavg_lists;
   out_minmaxavg_lists.lon_list=NULL;
@@ -72,6 +75,21 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 
   if( opcode & READ) {
     read_remap_file(ntiles_in,ntiles_out, grid_out, interp, opcode, nxgrid_per_input_tile);
+    for( n=0 ; n<ntiles_out ; n++) {
+      i_in = interp[n].i_in;
+      j_in = interp[n].j_in;
+      i_out = interp[n].i_out;
+      j_out = interp[n].j_out;
+      area = interp[n].area;
+      t_in = interp[n].t_in;
+      di_in = interp[n].di_in;
+      dj_in = interp[n].dj_in;
+      nxgrid = interp[n].nxgrid;
+#pragma acc update host(i_in[0:nxgrid], j_in[0:nxgrid],   \
+                        i_out[0:nxgrid], j_out[0:nxgrid], \
+                        t_in[0:nxgrid], di_in[0:nxgrid],  \
+                        dj_in[0:nxgrid], area[0:nxgrid], interp[n].nxgrid)
+    }
   }
   else {
 
@@ -79,9 +97,6 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 
     //START NTILES_OUT
     for(n=0; n<ntiles_out; n++) {
-
-      int *i_in, *j_in, *i_out, *j_out, *t_in;
-      double *area, *di_in, *dj_in;
 
       nx_out = grid_out[n].nxc;
       ny_out = grid_out[n].nyc;
@@ -197,7 +212,6 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
     }
     free(area2);
   }
-
 }; /* setup_conserve_interp */
 
 
@@ -697,7 +711,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
     start_here = (int *)calloc(ntiles_in, sizeof(int));
     end_here = (int *)calloc(ntiles_in, sizeof(int));
 #pragma acc enter data copyin(itile_nxgrid[0:ntiles_in], start_here[0:ntiles_in], end_here[0:ntiles_in])
-#pragma acc enter data copyin(nxgrid_per_input_tile[0:ntiles_in])
+#pragma acc data present(nxgrid_per_input_tile[0:ntiles_in])
 #pragma acc parallel loop
     for(int itile=0 ; itile<ntiles_in ; itile++){
       for( int ii=0 ; ii<itile ; ii++) start_here[itile] += nxgrid_per_input_tile[ii];
@@ -926,7 +940,7 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
     free(out_miss);
     free(start_here);
     free(end_here);
-#pragma acc exit data delete( start_here[0:ntiles_in], end_here[0:ntiles_in], nxgrid_per_input_tile[0:ntiles_in] )
+#pragma acc exit data delete( start_here[0:ntiles_in], end_here[0:ntiles_in])
 #pragma acc exit data copyout(pdata_out[0:nx2*ny2*nz])
 #pragma acc exit data delete(out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz])
 
