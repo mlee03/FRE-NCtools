@@ -1084,7 +1084,7 @@ int main(int argc, char* argv[])
                    if (opcode & MONOTONIC)
                      do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
                    else{
-                     //#ifdef _OPENACC
+#ifdef _OPENACC
                      time_start_scalar=clock();
                      do_scalar_conserve_order2_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1,
                                                       nxgrid_per_input_tile);
@@ -1092,9 +1092,9 @@ int main(int argc, char* argv[])
                      time_scalar += 1.0*(time_end_scalar-time_start_scalar)/CLOCKS_PER_SEC;
                      time_endtoend = 1.0*(time_end_scalar-endtoend_start)/CLOCKS_PER_SEC;
                    }
-               //#else
-               //    do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-               //#endif
+#else
+               do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+#endif
                  else
                    do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
                if(debug) {
