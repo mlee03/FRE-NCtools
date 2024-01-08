@@ -359,6 +359,12 @@ int main(int argc, char* argv[])
   double time_get_in_grid=0, time_get_out_grid=0, time_get_input=0;
   double time_setup_interp=0, time_do_interp=0, time_write=0;
   clock_t time_start, time_end;
+  clock_t time_start_scalar, time_end_scalar;
+  clock_t endtoend_start, endtoend_end;
+  clock_t setup_end;
+  double time_endtoend=0.;
+  double time_scalar=0.;
+  double time_setup=0.;
 
   int *nxgrid_per_input_tile;
 
@@ -973,9 +979,14 @@ int main(int argc, char* argv[])
 
     setup_bilinear_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode, dlon_in, dlat_in, lonbegin_in, latbegin_in );
   }
-  else
+  else{
+    endtoend_start=clock();
     nxgrid_per_input_tile = (int *)malloc(ntiles_in*sizeof(int));
-  setup_conserve_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode, nxgrid_per_input_tile);
+    setup_conserve_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode, nxgrid_per_input_tile);
+    setup_end=clock();
+    time_setup= 1.0*(setup_end - endtoend_start)/CLOCKS_PER_SEC;
+    printf("SETUP TIME %f\n", time_setup);
+  }
    if(debug) {
      time_end = clock();
      time_setup_interp = 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
@@ -1020,91 +1031,96 @@ int main(int argc, char* argv[])
    }
 
   /* Then doing the regridding */
-  for(m=0; m<file_in->nt; m++) {
-    int memsize, level_z, level_n, level_t;
+   for(m=0; m<file_in->nt; m++) {
+     int memsize, level_z, level_n, level_t;
 
-    write_output_time(ntiles_out, file_out, m);
-    if(nfiles > 1) write_output_time(ntiles_out, file2_out, m);
+     write_output_time(ntiles_out, file_out, m);
+     if(nfiles > 1) write_output_time(ntiles_out, file2_out, m);
 
-    /* first interp scalar variable */
-    for(l=0; l<nscalar; l++) {
-      if( !scalar_in->var[l].has_taxis && m>0) continue;
-      if( !scalar_in->var[l].do_regrid ) continue;
-      level_t = m + scalar_in->var[l].lstart;
-      /*--- to reduce memory usage, we are only do remapping for on horizontal level one time */
-      for(level_n =0; level_n < scalar_in->var[l].nn; level_n++) {
-	if(extrapolate) {
-	  get_input_data(ntiles_in, scalar_in, grid_in, bound_T, l, -1, level_n, level_t, extrapolate, stop_crit);
-	  allocate_field_data(ntiles_out, scalar_out, grid_out, scalar_in->var[l].nz);
-	  if( opcode & BILINEAR )
-	    do_scalar_bilinear_interp(interp, l, ntiles_in, grid_in, grid_out, scalar_in, scalar_out, finer_step, fill_missing);
-	  else
-	    do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode, scalar_in->var[l].nz);
-          if(vertical_interp) do_vertical_interp(&vgrid_in, &vgrid_out, grid_out, scalar_out, l);
-	  write_field_data(ntiles_out, scalar_out, grid_out, l, -1, level_n, m);
-	  if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
-	    for(n=0; n<ntiles_in; n++) {
-	      free(scalar_in[n].grad_x);
-	      free(scalar_in[n].grad_y);
-	    }
-	  }
-	  for(n=0; n<ntiles_in; n++) free(scalar_in[n].data);
-	  for(n=0; n<ntiles_out; n++) free(scalar_out[n].data);
-	}
-	else {
-	  for(level_z=scalar_in->var[l].kstart; level_z <= scalar_in->var[l].kend; level_z++)
-	    {
-        if(debug) time_start = clock();
-        if(test_case)
-          get_test_input_data(test_case, test_param, ntiles_in, scalar_in, grid_in, bound_T, opcode);
-	      else
-          get_input_data(ntiles_in, scalar_in, grid_in, bound_T, l, level_z, level_n, level_t, extrapolate, stop_crit);
-        if(debug) {
-	        time_end = clock();
-          time_get_input += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
-	      }
+     /* first interp scalar variable */
+     for(l=0; l<nscalar; l++) {
+       if( !scalar_in->var[l].has_taxis && m>0) continue;
+       if( !scalar_in->var[l].do_regrid ) continue;
+       level_t = m + scalar_in->var[l].lstart;
+       /*--- to reduce memory usage, we are only do remapping for on horizontal level one time */
+       for(level_n =0; level_n < scalar_in->var[l].nn; level_n++) {
+         if(extrapolate) {
+           get_input_data(ntiles_in, scalar_in, grid_in, bound_T, l, -1, level_n, level_t, extrapolate, stop_crit);
+           allocate_field_data(ntiles_out, scalar_out, grid_out, scalar_in->var[l].nz);
+           if( opcode & BILINEAR )
+             do_scalar_bilinear_interp(interp, l, ntiles_in, grid_in, grid_out, scalar_in, scalar_out, finer_step, fill_missing);
+           else
+             do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode, scalar_in->var[l].nz);
+           if(vertical_interp) do_vertical_interp(&vgrid_in, &vgrid_out, grid_out, scalar_out, l);
+           write_field_data(ntiles_out, scalar_out, grid_out, l, -1, level_n, m);
+           if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
+             for(n=0; n<ntiles_in; n++) {
+               free(scalar_in[n].grad_x);
+               free(scalar_in[n].grad_y);
+             }
+           }
+           for(n=0; n<ntiles_in; n++) free(scalar_in[n].data);
+           for(n=0; n<ntiles_out; n++) free(scalar_out[n].data);
+         }
+         else {
+           for(level_z=scalar_in->var[l].kstart; level_z <= scalar_in->var[l].kend; level_z++)
+             {
+               if(debug) time_start = clock();
+               if(test_case)
+                 get_test_input_data(test_case, test_param, ntiles_in, scalar_in, grid_in, bound_T, opcode);
+               else
+                 get_input_data(ntiles_in, scalar_in, grid_in, bound_T, l, level_z, level_n, level_t, extrapolate, stop_crit);
+               if(debug) {
+                 time_end = clock();
+                 time_get_input += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
+               }
 
-	      allocate_field_data(ntiles_out, scalar_out, grid_out, 1);
-	      if(debug) time_start = clock();
-	      if( opcode & BILINEAR )
-          do_scalar_bilinear_interp(interp, l, ntiles_in, grid_in, grid_out, scalar_in, scalar_out, finer_step, fill_missing);
-	      else
-          if( opcode & CONSERVE_ORDER2)
-            if (opcode & MONOTONIC)
-              do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-            else
-              //#ifdef _OPENACC
-              do_scalar_conserve_order2_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1,
-                                               nxgrid_per_input_tile);
-        //#else
-        //    do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-        //#endif
-          else
-            do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-        if(debug) {
-          time_end = clock();
-          time_do_interp += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
-	      }
+               allocate_field_data(ntiles_out, scalar_out, grid_out, 1);
+               if(debug) time_start = clock();
+               if( opcode & BILINEAR )
+                 do_scalar_bilinear_interp(interp, l, ntiles_in, grid_in, grid_out, scalar_in, scalar_out, finer_step, fill_missing);
+               else
+                 if( opcode & CONSERVE_ORDER2)
+                   if (opcode & MONOTONIC)
+                     do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+                   else{
+                     //#ifdef _OPENACC
+                     time_start_scalar=clock();
+                     do_scalar_conserve_order2_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1,
+                                                      nxgrid_per_input_tile);
+                     time_end_scalar=clock();
+                     time_scalar += 1.0*(time_end_scalar-time_start_scalar)/CLOCKS_PER_SEC;
+                     time_endtoend = 1.0*(time_end_scalar-endtoend_start)/CLOCKS_PER_SEC;
+                   }
+               //#else
+               //    do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+               //#endif
+                 else
+                   do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+               if(debug) {
+                 time_end = clock();
+                 time_do_interp += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
+               }
 
-	      if(debug) time_start = clock();
-	      write_field_data(ntiles_out, scalar_out, grid_out, l, level_z, level_n, m);
-	      if(debug) {
-		time_end = clock();
-	        time_write += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
-	      }
-	      if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
-		for(n=0; n<ntiles_in; n++) {
-		  free(scalar_in[n].grad_x);
-		  free(scalar_in[n].grad_y);
-		  free(scalar_in[n].grad_mask);
-		}
-	      }
-	      for(n=0; n<ntiles_in; n++) free(scalar_in[n].data);
-	      for(n=0; n<ntiles_out; n++) free(scalar_out[n].data);
-	    }
-	}
-      }
-    }
+               if(debug) time_start = clock();
+               write_field_data(ntiles_out, scalar_out, grid_out, l, level_z, level_n, m);
+               if(debug) {
+                 time_end = clock();
+                 time_write += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
+               }
+               if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
+                 for(n=0; n<ntiles_in; n++) {
+                   free(scalar_in[n].grad_x);
+                   free(scalar_in[n].grad_y);
+                   free(scalar_in[n].grad_mask);
+                 }
+               }
+               for(n=0; n<ntiles_in; n++) free(scalar_in[n].data);
+               for(n=0; n<ntiles_out; n++) free(scalar_out[n].data);
+             }
+         }
+       }
+     }
    if(debug) print_mem_usage("After do interp");
     /* then interp vector field */
     for(l=0; l<nvector; l++) {
@@ -1149,6 +1165,9 @@ int main(int argc, char* argv[])
       }
     }
   }
+
+  printf("TIME DO_SCALAR_CONSERVE_ORDER2_INTERP %f\n", time_scalar);
+  printf("ENDENDENDENDEND %f\n", time_endtoend);
 
   mpp_end();
   return 0;
