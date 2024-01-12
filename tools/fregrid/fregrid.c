@@ -1031,8 +1031,8 @@ int main(int argc, char* argv[])
    }
 
     /* Then doing the regridding */ 
-   for(m=0; m<file_in->nt; m++) {
-     int memsize, level_z, level_n, level_t;
+  for(m=0; m<file_in->nt; m++) {
+    int memsize, level_z, level_n, level_t;
 
     write_output_time(ntiles_out, file_out, m);
     if(nfiles > 1) write_output_time(ntiles_out, file2_out, m);
@@ -1083,7 +1083,7 @@ int main(int argc, char* argv[])
                   if (opcode & MONOTONIC)
                     do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
                   else{
-#ifdef _OPENACC //TODO BRING BACK
+#ifdef _OPENACC
                     time_start_scalar=clock();
                     do_scalar_conserve_order2_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1,
                                                       nxgrid_per_input_tile);
@@ -1091,9 +1091,9 @@ int main(int argc, char* argv[])
                     time_scalar += 1.0*(time_end_scalar-time_start_scalar)/CLOCKS_PER_SEC;
                     time_endtoend = 1.0*(time_end_scalar-endtoend_start)/CLOCKS_PER_SEC;
                   }
-#else //TODO
+#else
               do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-#endif //TODO
+#endif
                  else
                   do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
               if(debug) {
