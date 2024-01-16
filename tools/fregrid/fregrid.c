@@ -1064,50 +1064,50 @@ int main(int argc, char* argv[])
         }
         else {
           for(level_z=scalar_in->var[l].kstart; level_z <= scalar_in->var[l].kend; level_z++) {
-              if(debug) time_start = clock();
-              if(test_case)
-                get_test_input_data(test_case, test_param, ntiles_in, scalar_in, grid_in, bound_T, opcode);
-              else
-                get_input_data(ntiles_in, scalar_in, grid_in, bound_T, l, level_z, level_n, level_t, extrapolate, stop_crit);
-              if(debug) {
-                time_end = clock();
-                time_get_input += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
-              }
+            if(debug) time_start = clock();
+            if(test_case)
+              get_test_input_data(test_case, test_param, ntiles_in, scalar_in, grid_in, bound_T, opcode);
+            else
+              get_input_data(ntiles_in, scalar_in, grid_in, bound_T, l, level_z, level_n, level_t, extrapolate, stop_crit);
+            if(debug) {
+              time_end = clock();
+              time_get_input += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
+            }
 
-              allocate_field_data(ntiles_out, scalar_out, grid_out, 1);
-              if(debug) time_start = clock();
-              if( opcode & BILINEAR )
-                do_scalar_bilinear_interp(interp, l, ntiles_in, grid_in, grid_out, scalar_in, scalar_out, finer_step, fill_missing);
-              else
-                if( opcode & CONSERVE_ORDER2)
-                  if (opcode & MONOTONIC)
-                    do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-                  else{
-#ifdef _OPENACC
-                    time_start_scalar=clock();
-                    do_scalar_conserve_order2_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1,
-                                                      nxgrid_per_input_tile);
-                    time_end_scalar=clock();
-                    time_scalar += 1.0*(time_end_scalar-time_start_scalar)/CLOCKS_PER_SEC;
-                    time_endtoend = 1.0*(time_end_scalar-endtoend_start)/CLOCKS_PER_SEC;
-                  }
-#else
-              do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-#endif
-                 else
+            allocate_field_data(ntiles_out, scalar_out, grid_out, 1);
+            if(debug) time_start = clock();
+            if( opcode & BILINEAR )
+              do_scalar_bilinear_interp(interp, l, ntiles_in, grid_in, grid_out, scalar_in, scalar_out, finer_step, fill_missing);
+            else
+              if( opcode & CONSERVE_ORDER2)
+                if (opcode & MONOTONIC)
                   do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-              if(debug) {
-                time_end = clock();
-                time_do_interp += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
-              }
+                else{
+#ifdef _OPENACC
+                  time_start_scalar=clock();
+                  do_scalar_conserve_order2_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1,
+                                                    nxgrid_per_input_tile);
+                  time_end_scalar=clock();
+                  time_scalar += 1.0*(time_end_scalar-time_start_scalar)/CLOCKS_PER_SEC;
+                  time_endtoend = 1.0*(time_end_scalar-endtoend_start)/CLOCKS_PER_SEC;
+#else
+                  do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+#endif
+               }
+               else
+                 do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+               if(debug) {
+                 time_end = clock();
+                 time_do_interp += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
+               }
 
-              if(debug) time_start = clock();
-              write_field_data(ntiles_out, scalar_out, grid_out, l, level_z, level_n, m);
-              if(debug) {
-                time_end = clock();
-                time_write += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
-              }
-              if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
+               if(debug) time_start = clock();
+               write_field_data(ntiles_out, scalar_out, grid_out, l, level_z, level_n, m);
+               if(debug) {
+                 time_end = clock();
+                 time_write += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
+               }
+               if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
                 for(n=0; n<ntiles_in; n++) {
                   free(scalar_in[n].grad_x);
                   free(scalar_in[n].grad_y);
