@@ -38,7 +38,5 @@ SECONDS=0
 		--output_mosaic $dir_in/ocean_mosaic.nc \
 		--output_mosaic $dir_in/ocean_mosaic.nc \
 		--output_topog $dir_in/topog.nc \
-		--output_topog $dir_in/topog.nc \
-		--output_file runoff.cm2m.nc
 		--output_file runoff.cm2m.nc
 echo "**** TEST07 SECONDS TO RUN RUNOFF_REGRID $SECONDS"

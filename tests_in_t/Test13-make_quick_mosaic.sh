@@ -30,7 +30,6 @@ dir_out=$PWD/tests_in_t/Test13-output
 
 rm -rf $dir_out
 mkdir -p $dir_out
-cd $dir_out
 
 #Make the quick mosaic
 SECONDS=0

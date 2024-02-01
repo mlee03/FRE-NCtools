@@ -23,6 +23,7 @@
 # Test check_mask: create mask_table to mask out some all-land domain
 # to save processor usage for a sea-ice model, baltic1 experiment
 
+
 echo "Test check_mask for baltic1 experiment"
 
 dir_in=/home/Mikyung.Lee/FRE-NCTools/TESTS_INPUT/Test08-input
