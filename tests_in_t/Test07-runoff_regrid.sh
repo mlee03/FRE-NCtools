@@ -23,20 +23,18 @@
 # Test remap runoff data from regular lat-lon grid onto cm2m grid
 
 echo "Test remap runoff data from regular lat-lon grid onto cm2m grid"
+echo "COMPILED ON `tail -n 1 $my_bin/COMPILE_HISTORY`"
+echo "=============================================="
 
 dir_in=/home/Mikyung.Lee/FRE-NCTools/TESTS_INPUT/Test07-input
-dir_out=$PWD/tests_in_t/Test07-output
+dir_out=$PWD/Test07-output
 
-rm -rf $dir_out
-mkdir -p $dir_out
-cd $dir_out
+[[ -d $dir_out ]] ; rm -rf $dir_out
+mkdir -p $dir_out && cd $dir_out
 
-SECONDS=0
   runoff_regrid \
 		--input_file $dir_in/runoff.daitren.iaf.nc \
 		--input_fld_name runoff \
 		--output_mosaic $dir_in/ocean_mosaic.nc \
-		--output_mosaic $dir_in/ocean_mosaic.nc \
 		--output_topog $dir_in/topog.nc \
 		--output_file runoff.cm2m.nc
-echo "**** TEST07 SECONDS TO RUN RUNOFF_REGRID $SECONDS"
