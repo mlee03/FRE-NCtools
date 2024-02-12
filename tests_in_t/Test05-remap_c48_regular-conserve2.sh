@@ -1,7 +1,6 @@
 #!/usr/bin/bash
 
 echo "remap data from C48 to N45 regular lat-lon grid with conservative 2nd order"
-echo "COMPILED ON `tail -n 1 $my_bin/COMPILE_HISTORY`"
 echo "=============================================="
 
 dir_in=/home/Mikyung.Lee/FRE-NCTools/TESTS_INPUT/Test05-input

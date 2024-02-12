@@ -45,6 +45,6 @@ echo "FRESH COMPILE ON \`date\`" >> $install_dir/COMPILE_HISTORY
 cat > compileme.sh <<EOF
  #!/bin/bash
  make install
- echo "RECOMPILE ON `date` >> $install_dir/COMPILE_HISTORY
+ echo "RECOMPILE ON /`date/` >> $install_dir/COMPILE_HISTORY
 EOF
 chmod +x compileme.sh
