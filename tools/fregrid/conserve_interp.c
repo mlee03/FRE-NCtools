@@ -22,6 +22,7 @@
 #include <string.h>
 #include <netcdf.h>
 #include <math.h>
+#include <time.h>
 #include "constant.h"
 #include "globals.h"
 #include "create_xgrid.h"
@@ -40,7 +41,7 @@
   Setup the interpolation weight for conservative interpolation
 *******************************************************************************/
 void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles_out,
-			   Grid_config *grid_out, Interp_config *interp, unsigned int opcode)
+			   Grid_config *grid_out, Interp_config *interp, unsigned int opcode, int debug)
 {
   int    n, m, i, ii, jj, nx_in, ny_in, nx_out, ny_out, tile;
   size_t nxgrid, nxgrid2, nxgrid_prev;
@@ -48,6 +49,9 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   int   *tmp_t_in=NULL, *tmp_i_in=NULL, *tmp_j_in=NULL, *tmp_i_out=NULL, *tmp_j_out=NULL;
   double *tmp_di_in, *tmp_dj_in;
   double *xgrid_area=NULL, *tmp_area=NULL, *xgrid_clon=NULL, *xgrid_clat=NULL;
+  
+  double total_time=0;
+  clock_t time_start, time_end;
 
   double garea;
   typedef struct{
@@ -184,9 +188,16 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 	  ny_now = jend-jstart+1;
 
 	  if(opcode & CONSERVE_ORDER1) {
+	    if(debug) time_start = clock();
 	    nxgrid = create_xgrid_2dx2d_order1(&nx_in, &ny_now, &nx_out, &ny_out, grid_in[m].lonc+jstart*(nx_in+1),
 					       grid_in[m].latc+jstart*(nx_in+1),  grid_out[n].lonc,  grid_out[n].latc,
 					       mask, i_in, j_in, i_out, j_out, xgrid_area);
+	    if(debug) {
+	      time_end = clock();
+	      total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
+	      printf("NXGRID=%d  tile_n=%d  tile_m=%d  time_taken=%f\n\n",nxgrid, n, m, total_time);
+	    }
+
 	    for(i=0; i<nxgrid; i++) j_in[i] += jstart;
 	  }
 	  else if(opcode & CONSERVE_ORDER2) {
@@ -194,9 +205,16 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 	    int    *g_i_in, *g_j_in;
 	    double *g_area, *g_clon, *g_clat;
 
+	    if(debug) time_start = clock();
 	    nxgrid = create_xgrid_2dx2d_order2(&nx_in, &ny_now, &nx_out, &ny_out, grid_in[m].lonc+jstart*(nx_in+1),
 					       grid_in[m].latc+jstart*(nx_in+1),  grid_out[n].lonc,  grid_out[n].latc,
 					       mask, i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat);
+	    if(debug) {
+	      time_end = clock();
+	      total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
+	      printf("NXGRID=%d  tile_n=%d  tile_m=%d  time_taken=%f\n\n",nxgrid, n, m, total_time);
+	    }
+	    
 	    for(i=0; i<nxgrid; i++) j_in[i] += jstart;
 
 	    /* For the purpose of bitiwise reproducing, the following operation is needed. */
@@ -231,6 +249,8 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 	}
 
       	free(mask);
+	
+	if(debug) time_start = clock();
 	if(nxgrid > 0) {
 	  nxgrid_prev = interp[n].nxgrid;
 	  interp[n].nxgrid += nxgrid;
@@ -312,6 +332,11 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 	    free(tmp_i_out);
 	    free(tmp_j_out);
 	    free(tmp_area);
+	  }
+	  if(debug) {
+	    time_end = clock();
+	    total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
+	    printf("GET_INTERP nxgrid=%d  timetaken=%f\n", nxgrid, total_time);
 	  }
 	}  /* if(nxgrid>0) */
       }
