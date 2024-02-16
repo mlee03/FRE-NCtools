@@ -489,7 +489,7 @@ void get_interp_acc(const int n, const int ntiles_in, Grid_config *grid_in,
 
   //copy over interp from interp_tmp
   nxgrid = interp[n].nxgrid;
-  interp[n].i_in = (int *)malloc(nxgrid*sizeof(int));
+  /*interp[n].i_in = (int *)malloc(nxgrid*sizeof(int));
   interp[n].j_in = (int *)malloc(nxgrid*sizeof(int));
   interp[n].i_out = (int *)malloc(nxgrid*sizeof(int));
   interp[n].j_out = (int *)malloc(nxgrid*sizeof(int));
@@ -497,7 +497,7 @@ void get_interp_acc(const int n, const int ntiles_in, Grid_config *grid_in,
   interp[n].t_in = (int *)malloc(nxgrid*sizeof(int));
   interp[n].di_in = (double *)malloc(nxgrid*sizeof(double));
   interp[n].dj_in = (double *)malloc(nxgrid*sizeof(double));
-  pinterp = interp+n;
+  pinterp = interp+n;*/
   i_in = interp[n].i_in;
   j_in = interp[n].j_in;
   i_out = interp[n].i_out;

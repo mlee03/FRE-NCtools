@@ -2159,11 +2159,11 @@ void get_input_data(int ntiles, Field_config *field, Grid_config *grid, Bound_co
 
     if(field[n].var[varid].scale != 0) {
       for(i=0; i<nx*ny*nz; i++)
-	if(data[i] != missing_value) data[i] *= field[n].var[varid].scale;
+        if(data[i] != missing_value) data[i] *= field[n].var[varid].scale;
     }
     if(field[n].var[varid].offset != 0) {
       for(i=0; i<nx*ny*nz; i++)
-	if(data[i] != missing_value) data[i] += field[n].var[varid].offset;
+        if(data[i] != missing_value) data[i] += field[n].var[varid].offset;
     }
 
     /* extrapolate data if needed */
@@ -2173,16 +2173,16 @@ void get_input_data(int ntiles, Field_config *field, Grid_config *grid, Bound_co
       tmp = (double *)malloc(nx*ny*nz*sizeof(double));
       for(i=0; i<nx*ny*nz; i++) tmp[i] = data[i];
       do_extrapolate(nx, ny, nz, grid[n].lont1D, grid[n].latt1D, tmp, data, grid[n].is_cyclic,
-		     field[n].var[varid].missing, stop_crit );
+                     field[n].var[varid].missing, stop_crit );
       field[n].var[varid].has_missing = 0;
       free(tmp);
     }
     if(halo != 0) {
       /* copy the data onto compute domain */
       for(k=0; k<nz; k++) for(j=0; j<ny; j++) for(i=0; i<nx; i++) {
-	i1 = k*(nx+2*halo)*(ny+2*halo)+(j+halo)*(nx+2*halo)+i+halo;
-	i2 = k*nx*ny + j*nx+i;
-	field[n].data[i1] = data[i2];
+            i1 = k*(nx+2*halo)*(ny+2*halo)+(j+halo)*(nx+2*halo)+i+halo;
+            i2 = k*nx*ny + j*nx+i;
+            field[n].data[i1] = data[i2];
      }
       free(data);
     }
@@ -2192,7 +2192,7 @@ void get_input_data(int ntiles, Field_config *field, Grid_config *grid, Bound_co
       int i;
 
       if( !field[n].area ) {
-	field[n].area = (double *) malloc(nx*ny*sizeof(double));
+        field[n].area = (double *) malloc(nx*ny*sizeof(double));
       }
       for(i=0; i<4; i++) { start2[i] = 0; nread2[i] = 1; }
       i = 0;
@@ -2212,51 +2212,51 @@ void get_input_data(int ntiles, Field_config *field, Grid_config *grid, Bound_co
     for(n=0; n<ntiles; n++) {
       nbound = bound[n].nbound;
       if(nbound > 0) {
-	dHold = (Data_holder *)malloc(nbound*sizeof(Data_holder));
-	for(l=0; l<nbound; l++) {
-	  dHold[l].data = field[bound[n].tile2[l]].data;
-	  dHold[l].nx = grid[bound[n].tile2[l]].nx+2;
-	  dHold[l].ny = grid[bound[n].tile2[l]].ny+2;
-	}
-	update_halo(grid[n].nx+2, grid[n].ny+2, nz, field[n].data, &(bound[n]), dHold );
-	for(l=0; l<nbound; l++) dHold[l].data = NULL;
-	free(dHold);
+        dHold = (Data_holder *)malloc(nbound*sizeof(Data_holder));
+        for(l=0; l<nbound; l++) {
+          dHold[l].data = field[bound[n].tile2[l]].data;
+          dHold[l].nx = grid[bound[n].tile2[l]].nx+2;
+          dHold[l].ny = grid[bound[n].tile2[l]].ny+2;
+        }
+        update_halo(grid[n].nx+2, grid[n].ny+2, nz, field[n].data, &(bound[n]), dHold );
+        for(l=0; l<nbound; l++) dHold[l].data = NULL;
+        free(dHold);
       }
     }
     /* second order conservative interpolation, gradient need to be calculated */
     if(interp_method == CONSERVE_ORDER2) {
       for(n=0; n<ntiles; n++) {
-	int is_true = 1;
-	nx = grid[n].nx;
-	ny = grid[n].ny;
-	field[n].grad_x = (double *)malloc(nx*ny*nz*sizeof(double));
-	field[n].grad_y = (double *)malloc(nx*ny*nz*sizeof(double));
-	field[n].grad_mask = (int *)malloc(nx*ny*nz*sizeof(int));
-	for(k=0; k<nz; k++) for(j=0; j<ny; j++) for(i=0; i<nx; i++) {
-	  field[n].grad_mask[k*nx*ny+j*nx+i] = 0;
-	}
-	for(k=0; k<nz; k++) {
-	  p = k*(nx+2)*(ny+2);
-	  grad_c2l(&(grid[n].nx), &(grid[n].ny), field[n].data+p, grid[n].dx, grid[n].dy, grid[n].area,
-		   grid[n].edge_w, grid[n].edge_e, grid[n].edge_s, grid[n].edge_n,
-		   grid[n].en_n, grid[n].en_e, grid[n].vlon_t, grid[n].vlat_t,
-		   field[n].grad_x, field[n].grad_y, &is_true, &is_true, &is_true, &is_true);
-	}
-	/* where there is missing and using second order conservative interpolation, need to calculate mask for gradient */
-	if( field[n].var[varid].has_missing ) {
-	  int ip1, im1, jp1, jm1,kk,ii,jj;
-	  double missing;
-	  missing = field[n].var[varid].missing;
-	  for(k=0; k<nz; k++) for(j=0; j<ny; j++) for(i=0; i<nx; i++) {
-	    ii=i+1; ip1 = ii+1; im1 = ii-1; jj = j+1; jp1 = jj+1; jm1 = jj-1;
-	    l = k*(nx+2)*(ny+2);
-	    if(field[n].data[l+jm1*(nx+2)+im1] == missing || field[n].data[l+jm1*(nx+2)+ii ] == missing ||
-	       field[n].data[l+jm1*(nx+2)+ip1] == missing || field[n].data[l+jj *(nx+2)+im1] == missing ||
-	       field[n].data[l+jj *(nx+2)+ip1] == missing || field[n].data[l+jp1*(nx+2)+im1] == missing ||
-	       field[n].data[l+jp1*(nx+2)+ii ] == missing || field[n].data[l+jp1*(nx+2)+ip1] == missing  )
-	      field[n].grad_mask[k*nx*ny+j*nx+i] = 1;
-	  }
-	}
+        int is_true = 1;
+        nx = grid[n].nx;
+        ny = grid[n].ny;
+        field[n].grad_x = (double *)malloc(nx*ny*nz*sizeof(double));
+        field[n].grad_y = (double *)malloc(nx*ny*nz*sizeof(double));
+        field[n].grad_mask = (int *)malloc(nx*ny*nz*sizeof(int));
+        for(k=0; k<nz; k++) for(j=0; j<ny; j++) for(i=0; i<nx; i++) {
+              field[n].grad_mask[k*nx*ny+j*nx+i] = 0;
+            }
+        for(k=0; k<nz; k++) {
+          p = k*(nx+2)*(ny+2);
+          grad_c2l(&(grid[n].nx), &(grid[n].ny), field[n].data+p, grid[n].dx, grid[n].dy, grid[n].area,
+                   grid[n].edge_w, grid[n].edge_e, grid[n].edge_s, grid[n].edge_n,
+                   grid[n].en_n, grid[n].en_e, grid[n].vlon_t, grid[n].vlat_t,
+                   field[n].grad_x, field[n].grad_y, &is_true, &is_true, &is_true, &is_true);
+        }
+        /* where there is missing and using second order conservative interpolation, need to calculate mask for gradient */
+        if( field[n].var[varid].has_missing ) {
+          int ip1, im1, jp1, jm1,kk,ii,jj;
+          double missing;
+          missing = field[n].var[varid].missing;
+          for(k=0; k<nz; k++) for(j=0; j<ny; j++) for(i=0; i<nx; i++) {
+                ii=i+1; ip1 = ii+1; im1 = ii-1; jj = j+1; jp1 = jj+1; jm1 = jj-1;
+                l = k*(nx+2)*(ny+2);
+                if(field[n].data[l+jm1*(nx+2)+im1] == missing || field[n].data[l+jm1*(nx+2)+ii ] == missing ||
+                   field[n].data[l+jm1*(nx+2)+ip1] == missing || field[n].data[l+jj *(nx+2)+im1] == missing ||
+                   field[n].data[l+jj *(nx+2)+ip1] == missing || field[n].data[l+jp1*(nx+2)+im1] == missing ||
+                   field[n].data[l+jp1*(nx+2)+ii ] == missing || field[n].data[l+jp1*(nx+2)+ip1] == missing  )
+                  field[n].grad_mask[k*nx*ny+j*nx+i] = 1;
+              }
+        }
       }
     }
   }
