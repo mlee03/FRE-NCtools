@@ -1209,14 +1209,25 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
 #else
 
   malloc_xgrid_arrays(get_maxxgrid(), &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon , &xgrid_clat);
+  if(debug) time_start = clock();
   nxgrid = create_xgrid_2dx2d_order2(&nx_in, &ny_now, &nx_out, &ny_out, grid_in[m].lonc+jstart*(nx_in+1),
                                      grid_in[m].latc+jstart*(nx_in+1),  grid_out[n].lonc,  grid_out[n].latc,
                                      mask, i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat);
+  if(debug) {
+    time_end = clock();
+    total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
+    printf("NXGRID=%d  tile_n=%d  tile_m=%d  time_taken=%f\n\n",nxgrid, n, m, total_time);
+  }
+
   for(int i=0; i<nxgrid; i++) j_in[i] += jstart;
   get_CellStruct(m, nx_in, nxgrid, i_in, j_in, xgrid_area, xgrid_clon, xgrid_clat, cell_in);
   /* For the purpose of bitiwise reproducing, the following operation is needed. */
+  if(debug) time_start = clock();  
   get_interp( opcode, nxgrid, interp, m, n, i_in, j_in, i_out, j_out, xgrid_clon, xgrid_clat, xgrid_area );
-
+  time_end = clock();
+  total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
+  printf("GET_INTERP nxgrid=%d  timetaken=%f\n", nxgrid, total_time);
+  
 #endif
 
 #pragma acc exit data delete(counts_per_ij1[0:nx_in*ny_in], \
