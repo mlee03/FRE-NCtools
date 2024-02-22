@@ -19,9 +19,6 @@
  **********************************************************************/
 #ifndef CREATE_XGRID_H_
 #define CREATE_XGRID_H_
-#ifndef MAXXGRID
-#define MAXXGRID 80000000
-#endif
 
 #define MV 50
 /* this value is small compare to earth area */

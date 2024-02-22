@@ -26,6 +26,7 @@
 #include "mosaic_util.h"
 #include "interp.h"
 #include "create_xgrid.h"
+#include "create_xgrid_util.h"
 
 /*********************************************************************
    void cublic_spline_sp(size1, size2, grid1, grid2, data1, data2)

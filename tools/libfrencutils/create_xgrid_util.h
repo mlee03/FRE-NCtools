@@ -20,7 +20,7 @@
 #ifndef CREATE_XGRID_UTIL_H_
 #define CREATE_XGRID_UTIL_H_
 #ifndef MAXXGRID
-#define MAXXGRID 1e6
+#define MAXXGRID 8e8
 #endif
 
 #include "globals.h"
