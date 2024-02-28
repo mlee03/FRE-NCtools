@@ -24,6 +24,7 @@
 #include "mosaic_util.h"
 #include "create_xgrid_util.h"
 #include "constant.h"
+#include "openacc.h"
 
 #define AREA_RATIO_THRESH (1.e-6)
 #define MASK_THRESH       (0.5)
@@ -47,68 +48,25 @@ int line_intersect_2D_3D(double *a1, double *a2, double *q1, double *q2, double 
 void malloc_minmaxavg_lists(const int n, Minmaxavg_lists *minmaxavg_lists)
 {
 
-  if( minmaxavg_lists->lon_min_list != NULL ) {
-    free(minmaxavg_lists->lon_min_list);
-#pragma acc exit data delete( minmaxavg_lists->lon_min_list[0:n] )
-    minmaxavg_lists-> lon_min_list = NULL;
+  if(n==0) {
+    acc_free(minmaxavg_lists->lon_min_list);
+    acc_free(minmaxavg_lists->lon_max_list);
+    acc_free(minmaxavg_lists->lat_min_list);
+    acc_free(minmaxavg_lists->lat_max_list);
+    acc_free(minmaxavg_lists->n_list);
+    acc_free(minmaxavg_lists->lon_avg);
+    acc_free(minmaxavg_lists->lon_list);
+    acc_free(minmaxavg_lists->lat_list);
   }
-  if( minmaxavg_lists->lon_max_list != NULL ) {
-    free(minmaxavg_lists->lon_max_list);
-#pragma acc exit data delete( minmaxavg_lists->lon_max_list[0:n] )
-    minmaxavg_lists->lon_max_list = NULL;
-  }
-  if( minmaxavg_lists->lat_min_list != NULL ) {
-    free(minmaxavg_lists->lat_min_list);
-#pragma acc exit data delete( minmaxavg_lists->lat_min_list[0:n] )
-    minmaxavg_lists->lat_min_list = NULL;
-  }
-  if( minmaxavg_lists->lat_max_list != NULL ) {
-    free(minmaxavg_lists->lat_max_list);
-#pragma acc exit data delete( minmaxavg_lists->lat_max_list[0:n] )
-    minmaxavg_lists->lat_max_list = NULL;
-  }
-  if( minmaxavg_lists->n_list != NULL ) {
-    free(minmaxavg_lists->n_list);
-#pragma acc exit data delete( minmaxavg_lists->n_list[0:n] )
-    minmaxavg_lists->n_list = NULL;
-  }
-  if( minmaxavg_lists->lon_avg != NULL ) {
-    free(minmaxavg_lists->lon_avg);
-#pragma acc exit data delete( minmaxavg_lists->lon_avg[0:n] )
-    minmaxavg_lists->lon_avg = NULL;
-  }
-  if( minmaxavg_lists->lon_list != NULL ) {
-    free(minmaxavg_lists->lon_list);
-#pragma acc exit data delete( minmaxavg_lists->lon_list[0:n*MAX_V] )
-    minmaxavg_lists->lon_list = NULL;
-  }
-  if( minmaxavg_lists->lat_list != NULL ) {
-    free(minmaxavg_lists->lat_list);
-#pragma acc exit data delete( minmaxavg_lists->lat_list[0:n*MAX_V] )
-#pragma acc exit data delete(minmaxavg_lists)
-    minmaxavg_lists->lat_list = NULL;
-  }
-
-  if(n>0){
-    minmaxavg_lists->lon_min_list=(double *)malloc(n*sizeof(double));
-    minmaxavg_lists->lon_max_list=(double *)malloc(n*sizeof(double));
-    minmaxavg_lists->lat_min_list=(double *)malloc(n*sizeof(double));
-    minmaxavg_lists->lat_max_list=(double *)malloc(n*sizeof(double));
-    minmaxavg_lists->n_list=(int *)malloc(n*sizeof(int));
-    minmaxavg_lists->lon_avg=(double *)malloc(n*sizeof(double));
-    minmaxavg_lists->lon_list=(double *)malloc(MAX_V*n*sizeof(double));
-    minmaxavg_lists->lat_list=(double *)malloc(MAX_V*n*sizeof(double));
-
-#pragma acc enter data create(minmaxavg_lists)
-#pragma acc enter data create(minmaxavg_lists->lon_list[0:MAX_V*n], \
-                              minmaxavg_lists->lat_list[0:MAX_V*n], \
-                              minmaxavg_lists->lon_min_list[0:n], \
-                              minmaxavg_lists->lon_max_list[0:n], \
-                              minmaxavg_lists->lat_min_list[0:n], \
-                              minmaxavg_lists->lat_max_list[0:n], \
-                              minmaxavg_lists->n_list[0:n], \
-                              minmaxavg_lists->lon_avg[0:n] )
-
+  else {
+    minmaxavg_lists->lon_min_list=acc_malloc(n*sizeof(double));
+    minmaxavg_lists->lon_max_list=acc_malloc(n*sizeof(double));
+    minmaxavg_lists->lat_min_list=acc_malloc(n*sizeof(double));
+    minmaxavg_lists->lat_max_list=acc_malloc(n*sizeof(double));
+    minmaxavg_lists->n_list=acc_malloc(n*sizeof(int));
+    minmaxavg_lists->lon_avg=acc_malloc(n*sizeof(double));
+    minmaxavg_lists->lon_list=acc_malloc(MAX_V*n*sizeof(double));
+    minmaxavg_lists->lat_list=acc_malloc(MAX_V*n*sizeof(double));
   }
 
 }//malloc_minmaxavg_lists
@@ -128,10 +86,6 @@ void get_minmaxavg_lists(const int nx, const int ny, const double *lon, const do
 
 #pragma acc data present(lon[0:nxp*nyp], lat[0:nxp*nyp])
 #pragma acc data present(minmaxavg_lists)
-#pragma acc data present(minmaxavg_lists->lon_list[0:MAX_V*nx*ny], minmaxavg_lists->lat_list[0:MAX_V*nx*ny])
-#pragma acc data present(minmaxavg_lists->n_list[0:nx*ny], minmaxavg_lists->lon_avg[0:nx*ny])
-#pragma acc data present(minmaxavg_lists->lat_min_list[0:nx*ny], minmaxavg_lists->lat_max_list[0:nx*ny])
-#pragma acc data present(minmaxavg_lists->lon_min_list[0:nx*ny], minmaxavg_lists->lon_max_list[0:nx*ny])
 #pragma acc data copyin(nx, ny, nxp, nyp)
 #pragma acc parallel loop independent
   for(int ij=0; ij<nx*ny; ij++){

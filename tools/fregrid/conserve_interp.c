@@ -108,9 +108,8 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
                               grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
 
 #ifdef _OPENACC
-      //allocate memory for the lists
+      //allocate memory for the lists and compute the list values
       malloc_minmaxavg_lists(nx_out*ny_out, &out_minmaxavg_lists);
-      //compute the list values
       get_minmaxavg_lists(nx_out, ny_out, grid_out[n].lonc, grid_out[n].latc, &out_minmaxavg_lists);
 #endif
 
@@ -1222,12 +1221,12 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   for(int i=0; i<nxgrid; i++) j_in[i] += jstart;
   get_CellStruct(m, nx_in, nxgrid, i_in, j_in, xgrid_area, xgrid_clon, xgrid_clat, cell_in);
   /* For the purpose of bitiwise reproducing, the following operation is needed. */
-  if(debug) time_start = clock();  
+  if(debug) time_start = clock();
   get_interp( opcode, nxgrid, interp, m, n, i_in, j_in, i_out, j_out, xgrid_clon, xgrid_clat, xgrid_area );
   time_end = clock();
   total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
   printf("GET_INTERP nxgrid=%d  timetaken=%f\n", nxgrid, total_time);
-  
+
 #endif
 
 #pragma acc exit data delete(counts_per_ij1[0:nx_in*ny_in], \
