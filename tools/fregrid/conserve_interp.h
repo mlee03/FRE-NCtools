@@ -35,8 +35,11 @@ void do_vector_conserve_interp(Interp_config *interp, int varid, int ntiles_in, 
 void do_create_xgrid_order1( const int n, const int m,
                              const Grid_config *grid_in, const Grid_config *grid_out,
                              Interp_config *interp, unsigned int opcode, int debug ) ;
-void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
+void do_create_xgrid_order2_acc( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
                              Minmaxavg_lists *out_minmaxavg_lists, CellStruct *cell_in, Interp_config *interp,
+                             Interp_config *tmp_interp, unsigned int opcode, int debug) ;
+void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
+                             CellStruct *cell_in, Interp_config *interp,
                              Interp_config *tmp_interp, unsigned int opcode, int debug) ;
 void do_great_circle( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
                       Interp_config *interp, unsigned int opcode);

@@ -28,8 +28,8 @@
 #define MV 50
 /* this value is small compare to earth area */
 
-void malloc_minmaxavg_lists(const int n, Minmaxavg_lists *minmaxavg_lists);
-void get_minmaxavg_lists(const int nx, const int ny, const double *lon, const double *lat, Minmaxavg_lists *minmaxavg_lists);
+void malloc_minmaxavg_lists(const int n, Minmaxavg_lists *minmaxavg);
+void get_minmaxavg_lists(const int nx, const int ny, const double *lon, const double *lat, Minmaxavg_lists *minmaxavg);
 #pragma acc routine seq
 double poly_ctrlon(const double lon[], const double lat[], int n, double clon);
 #pragma acc routine seq
@@ -38,6 +38,7 @@ double box_ctrlon(double ll_lon, double ll_lat, double ur_lon, double ur_lat, do
 double box_ctrlat(double ll_lon, double ll_lat, double ur_lon, double ur_lat);
 int get_maxxgrid(void);
 void get_grid_area(const int *nlon, const int *nlat, const double *lon, const double *lat, double *area);
+void get_grid_area_acc(const int nlon, const int nlat, const double *lon, const double *lat, double *area);
 void get_grid_great_circle_area(const int *nlon, const int *nlat, const double *lon, const double *lat, double *area);
 //void get_grid_area_dimensionless(const int *nlon, const int *nlat, const double *lon, const double *lat, double *area);
 void get_grid_area_no_adjust(const int *nlon, const int *nlat, const double *lon, const double *lat, double *area);

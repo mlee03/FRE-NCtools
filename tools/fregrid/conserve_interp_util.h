@@ -43,7 +43,7 @@ void get_interp_dij(const int ntiles_in, const int ntiles_out,
                     const Grid_config *grid_in, CellStruct *cell_in, Interp_config *interp);
 
 void get_interp_dij_acc(const int m, const int nx_in, const int ny_in, const double *grid_area,
-                        const double *latc, const double *lonc, CellStruct *cellin_m);
+                        const double *latc, const double *lonc, CellStruct *cell_in);
 
 void get_interp_acc(const int n, const int ntiles_in, Grid_config *grid_in,
                     Interp_config *interp, Interp_config *tmp_interp, CellStruct *cell_in, int *nxgrid_per_input_tile);

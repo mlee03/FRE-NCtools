@@ -35,6 +35,7 @@
 #include "mpp.h"
 #include "mpp_io.h"
 #include "read_mosaic.h"
+#include "openacc.h"
 
 #define  AREA_RATIO (1.e-3)
 #define  MAXVAL (1.e20)
@@ -60,17 +61,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   int *i_in, *j_in, *i_out, *j_out, *t_in;
   double *area, *di_in, *dj_in;
 
-  //#ifdef _OPENACC
-  Minmaxavg_lists out_minmaxavg_lists;
-  out_minmaxavg_lists.lon_list=NULL;
-  out_minmaxavg_lists.lat_list=NULL;
-  out_minmaxavg_lists.lon_min_list=NULL;
-  out_minmaxavg_lists.lat_min_list=NULL;
-  out_minmaxavg_lists.lon_max_list=NULL;
-  out_minmaxavg_lists.lat_max_list=NULL;
-  out_minmaxavg_lists.n_list=NULL;
-  out_minmaxavg_lists.lon_avg=NULL;
-  //#endif
+  Minmaxavg_lists out_minmaxavg;
 
   if( opcode & READ) {
     read_remap_file(ntiles_in,ntiles_out, grid_out, interp, opcode, nxgrid_per_input_tile);
@@ -104,13 +95,13 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
       interp[n].nxgrid = 0;
       tmp_interp    = (Interp_config *)malloc(ntiles_in*sizeof(Interp_config));
 
-#pragma acc enter data copyin(grid_out[n].lonc[0:(nx_out+1)*(ny_out+1)], \
-                              grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
+#pragma acc enter data copyin(grid_out[n].lonc[0:(nx_out+1)*(ny_out+1)])
+#pragma acc enter data copyin(grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
 
 #ifdef _OPENACC
       //allocate memory for the lists and compute the list values
-      malloc_minmaxavg_lists(nx_out*ny_out, &out_minmaxavg_lists);
-      get_minmaxavg_lists(nx_out, ny_out, grid_out[n].lonc, grid_out[n].latc, &out_minmaxavg_lists);
+      malloc_minmaxavg_lists(nx_out*ny_out, &out_minmaxavg);
+      get_minmaxavg_lists(nx_out, ny_out, grid_out[n].lonc, grid_out[n].latc, &out_minmaxavg);
 #endif
 
       //START NTILES_IN
@@ -122,16 +113,20 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
           if(opcode & CONSERVE_ORDER1)
             do_create_xgrid_order1(n, m, grid_in, grid_out, interp, opcode, debug);
           else if(opcode & CONSERVE_ORDER2)
-            do_create_xgrid_order2(n, m, grid_in, grid_out, &out_minmaxavg_lists, cell_in, interp, tmp_interp, opcode, debug);
+#ifdef _OPENACC
+            do_create_xgrid_order2_acc(n, m, grid_in, grid_out, &out_minmaxavg, cell_in+m, interp, tmp_interp, opcode, debug);
+#else
+            do_create_xgrid_order2(n, m, grid_in, grid_out, cell_in, interp, tmp_interp, opcode, debug);
+#endif
           else
             mpp_error("conserve_interp: interp_method should be CONSERVE_ORDER1 or CONSERVE_ORDER2");
         } // opcode GREAT_CIRCLE or CONSERVE_ORDERs
       } // ntiles_in
 
-#pragma acc exit data delete(grid_out[n].lonc[0:(nx_out+1)*(ny_out+1)], \
-                             grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
+#pragma acc exit data delete(grid_out[n].lonc[0:(nx_out+1)*(ny_out+1)])
+#pragma acc exit data delete(grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
 #ifdef _OPENACC
-      malloc_minmaxavg_lists(zero, &out_minmaxavg_lists);
+      malloc_minmaxavg_lists(zero, &out_minmaxavg);
 #endif
 
 #ifdef _OPENACC
@@ -1119,8 +1114,81 @@ void do_create_xgrid_order1( const int n, const int m,
 
 }
 
+void do_create_xgrid_order2_acc( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
+                                 Minmaxavg_lists *out_minmaxavg, CellStruct *cell_in, Interp_config *interp,
+                                 Interp_config *tmp_interp, unsigned int opcode, int debug )
+{
+
+  double *mask;
+
+  int nxgrid, approx_nxgrid;
+  int nx_out, ny_out, nx_in, ny_in ;
+  int jstart, jend, ny_now;
+
+  int *counts_per_ij1=NULL, *ij2_start=NULL, *ij2_end=NULL;
+
+  int zero=0;
+  clock_t time_start, time_end;
+  double total_time;
+
+  nx_out = grid_out[n].nxc;
+  ny_out = grid_out[n].nyc;
+  nx_in = grid_in[m].nx;
+  ny_in = grid_in[m].ny;
+
+#pragma acc enter data copyin(grid_in[m].latc[0:(nx_in+1)*(ny_in+1)])
+#pragma acc enter data copyin(grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)])
+#pragma acc enter data copyin(grid_in[m].cell_area[0:nx_in*ny_in])
+
+  cell_in->area = (double *)acc_malloc(nx_in*ny_in*sizeof(double));
+  cell_in->clon = (double *)acc_malloc(nx_in*ny_in*sizeof(double));
+  cell_in->clat = (double *)acc_malloc(nx_in*ny_in*sizeof(double));
+
+  mask           = (double *)acc_malloc(nx_in*ny_in*sizeof(double));
+  counts_per_ij1 = (int *)acc_malloc(nx_in*ny_in*sizeof(int));
+  ij2_start      = (int *)acc_malloc(nx_in*ny_in*sizeof(int));
+  ij2_end        = (int *)acc_malloc(nx_in*ny_in*sizeof(int));
+
+#pragma acc parallel loop independent deviceptr(mask)
+  for(int i=0; i<nx_in*ny_in; i++) mask[i] = 1.0;
+
+  get_jstart_jend(nx_out, ny_out, nx_in, ny_in, grid_out[n].latc, grid_in[m].latc, &jstart, &jend, &ny_now);
+
+  if(debug) time_start = clock();
+  approx_nxgrid = prepare_create_xgrid_2dx2d_order2_acc(nx_in, ny_now, nx_out, ny_out, grid_in[m].lonc+jstart*(nx_in+1),
+                                                        grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc,
+                                                        out_minmaxavg, mask, counts_per_ij1, ij2_start, ij2_end );
+  if(debug) {
+    time_end = clock();
+    total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
+    printf("APPROX_NXGRID=%d  tile_n=%d  tile_m=%d  time_taken=%f\n", approx_nxgrid, n, m, total_time);
+  }
+
+  if(debug) time_start = clock();
+  nxgrid = create_xgrid_2dx2d_order2_acc(nx_in, ny_now, nx_out, ny_out, grid_in[m].lonc+jstart*(nx_in+1),
+                                         grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc, out_minmaxavg, mask,
+                                         approx_nxgrid, counts_per_ij1, ij2_start, ij2_end, tmp_interp+m, cell_in, jstart, m);
+  if(debug) {
+    time_end = clock();
+    total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
+    printf("       NXGRID=%d  tile_n=%d  tile_m=%d  time_taken=%f\n\n",nxgrid, n, m, total_time);
+  }
+
+  interp[n].nxgrid += nxgrid;
+  get_interp_dij_acc(m, nx_in, ny_in, grid_in[m].cell_area, grid_in[m].latc, grid_in[m].lonc, cell_in);
+
+  acc_free(counts_per_ij1);
+  acc_free(ij2_start);
+  acc_free(ij2_end);
+  acc_free(mask);
+#pragma acc exit data delete(grid_in[m].latc[0:(nx_in+1)*(ny_in+1)], \
+                             grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)], \
+                             grid_in[m].cell_area[0:nx_in*ny_in])
+
+}
+
 void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
-                             Minmaxavg_lists *out_minmaxavg_lists, CellStruct *cell_in, Interp_config *interp,
+                             CellStruct *cell_in, Interp_config *interp,
                              Interp_config *tmp_interp, unsigned int opcode, int debug )
 {
 
@@ -1128,7 +1196,8 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   double *xgrid_area=NULL, *xgrid_clon=NULL, *xgrid_clat=NULL ;
   double *mask;
 
-  int nxgrid, approx_nxgrid;
+  int nxgrid;
+
   int nx_out, ny_out, nx_in, ny_in ;
   int jstart, jend, ny_now;
 
@@ -1146,28 +1215,8 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   cell_in[m].area = (double *)malloc(nx_in*ny_in*sizeof(double));
   cell_in[m].clon = (double *)malloc(nx_in*ny_in*sizeof(double));
   cell_in[m].clat = (double *)malloc(nx_in*ny_in*sizeof(double));
+
   mask = (double *)malloc(nx_in*ny_in*sizeof(double));
-#ifdef _OPENACC
-  counts_per_ij1 = (int *)malloc( nx_in*ny_in*sizeof(int) );
-  ij2_start = (int *)malloc( nx_in*ny_in*sizeof(int) );
-  ij2_end = (int *)malloc( nx_in*ny_in*sizeof(int) );
-#endif
-
-#pragma acc enter data copyin(grid_in[m], cell_in[m])
-#pragma acc enter data copyin(grid_in[m].latc[0:(nx_in+1)*(ny_in+1)], \
-                              grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)], \
-                              grid_in[m].cell_area[0:nx_in*ny_in])
-#pragma acc enter data create(cell_in[m].area[0:nx_in*ny_in], \
-                              cell_in[m].clon[0:nx_in*ny_in], \
-                              cell_in[m].clat[0:nx_in*ny_in], \
-                              mask[0:nx_in*ny_in])
-#pragma acc enter data create(counts_per_ij1[0:nx_in*ny_in], \
-                              ij2_start[0:nx_in*ny_in],      \
-                              ij2_end[0:nx_in*ny_in])
-
-#pragma acc data present(mask[0:nx_in*ny_in], cell_in[m].area[0:nx_in*ny_in], \
-                         cell_in[m].clon[0:nx_in*ny_in], cell_in[m].clat[0:nx_in*ny_in])
-#pragma acc parallel loop independent
   for(int i=0; i<nx_in*ny_in; i++) {
     mask[i] = 1.0;
     cell_in[m].area[i]=0.;
@@ -1177,37 +1226,8 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
 
   get_jstart_jend(nx_out, ny_out, nx_in, ny_in, grid_out[n].latc, grid_in[m].latc, &jstart, &jend, &ny_now);
 
-#ifdef _OPENACC
-
-  if(debug) time_start = clock();
-  approx_nxgrid = prepare_create_xgrid_2dx2d_order2_acc(&nx_in, &ny_now, &nx_out, &ny_out, grid_in[m].lonc+jstart*(nx_in+1),
-                                                 grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc,
-                                                 out_minmaxavg_lists, mask, counts_per_ij1, ij2_start, ij2_end );
-  if(debug) {
-    time_end = clock();
-    total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
-    printf("APPROX_NXGRID=%d  tile_n=%d  tile_m=%d  time_taken=%f\n", approx_nxgrid, n, m, total_time);
-  }
-
-  if(debug) time_start = clock();
-  nxgrid = create_xgrid_2dx2d_order2_acc(&nx_in, &ny_now, &nx_out, &ny_out,
-                                         grid_in[m].lonc+jstart*(nx_in+1), grid_in[m].latc+jstart*(nx_in+1),
-                                         grid_out[n].lonc, grid_out[n].latc, out_minmaxavg_lists,
-                                         mask, approx_nxgrid, counts_per_ij1, ij2_start, ij2_end,
-                                         tmp_interp+m, &i_in, &j_in, &i_out, &j_out,
-                                         &xgrid_area, &xgrid_clon, &xgrid_clat, cell_in+m, jstart, m);
-  if(debug) {
-    time_end = clock();
-    total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
-    printf("       NXGRID=%d  tile_n=%d  tile_m=%d  time_taken=%f\n\n",nxgrid, n, m, total_time);
-  }
-
-  interp[n].nxgrid += nxgrid;
-  get_interp_dij_acc(m, nx_in, ny_in, grid_in[m].cell_area, grid_in[m].latc, grid_in[m].lonc, cell_in+m);
-
-#else
-
   malloc_xgrid_arrays(get_maxxgrid(), &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon , &xgrid_clat);
+
   if(debug) time_start = clock();
   nxgrid = create_xgrid_2dx2d_order2(&nx_in, &ny_now, &nx_out, &ny_out, grid_in[m].lonc+jstart*(nx_in+1),
                                      grid_in[m].latc+jstart*(nx_in+1),  grid_out[n].lonc,  grid_out[n].latc,
@@ -1219,6 +1239,7 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   }
 
   for(int i=0; i<nxgrid; i++) j_in[i] += jstart;
+
   get_CellStruct(m, nx_in, nxgrid, i_in, j_in, xgrid_area, xgrid_clon, xgrid_clat, cell_in);
   /* For the purpose of bitiwise reproducing, the following operation is needed. */
   if(debug) time_start = clock();
@@ -1227,21 +1248,7 @@ void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_i
   total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
   printf("GET_INTERP nxgrid=%d  timetaken=%f\n", nxgrid, total_time);
 
-#endif
-
-#pragma acc exit data delete(counts_per_ij1[0:nx_in*ny_in], \
-                             ij2_start[0:nx_in*ny_in],      \
-                             ij2_end[0:nx_in*ny_in])
-#pragma acc exit data delete(grid_in[m].latc[0:(nx_in+1)*(ny_in+1)], \
-                             grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)], \
-                             grid_in[m].cell_area[0:nx_in*ny_in],    \
-                             mask[0:nx_in*ny_in])                    \
-
   malloc_xgrid_arrays(zero, &i_in, &j_in, &i_out, &j_out, &xgrid_area, &xgrid_clon , &xgrid_clat);
-  free(counts_per_ij1);
-  free(ij2_start);
-  free(ij2_end);
-  free(mask);
 
 }
 

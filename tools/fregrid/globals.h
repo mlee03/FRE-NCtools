@@ -245,14 +245,14 @@ typedef struct{
   } CellStruct;
 
 typedef struct{
-  double *lat_min_list;
-  double *lat_max_list;
-  double *lon_min_list;
-  double *lon_max_list;
+  double *lat_min;
+  double *lat_max;
+  double *lon_min;
+  double *lon_max;
   double *lon_avg;
-  double *lon_list;
-  double *lat_list;
-  int *n_list;
+  double *lon;
+  double *lat;
+  int *n;
 } Minmaxavg_lists;
 
 #endif
