@@ -158,6 +158,12 @@ typedef struct {
 } Interp_config;
 
 typedef struct {
+  Interp_config *interp_m;
+  remap_file[STRING];
+  int file_exists;
+} Interp_config_acc;
+
+typedef struct {
   int nz;
   double *z;
   double *zb;

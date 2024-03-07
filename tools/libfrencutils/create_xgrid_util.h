@@ -44,7 +44,7 @@ void get_grid_great_circle_area(const int *nlon, const int *nlat, const double *
 void get_grid_area_no_adjust(const int *nlon, const int *nlat, const double *lon, const double *lat, double *area);
 #pragma acc routine seq
 int clip(const double lon_in[], const double lat_in[], int n_in, double ll_lon, double ll_lat,
-   double ur_lon, double ur_lat, double lon_out[], double lat_out[]);
+         double ur_lon, double ur_lat, double lon_out[], double lat_out[]);
 void pimod(double x[],int nn);
 #pragma acc routine seq
 int clip_2dx2d(const double lon1_in[], const double lat1_in[], int n1_in,

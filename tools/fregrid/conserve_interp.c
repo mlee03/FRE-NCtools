@@ -45,15 +45,14 @@
   void setup_conserve_interp
   Setup the interpolation weight for conservative interpolation
 *******************************************************************************/
-void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles_out,
-                           Grid_config *grid_out, Interp_config *interp, unsigned int opcode, int *nxgrid_per_input_tile, int debug)
+void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles_out, Grid_config *grid_out,
+                           Interp_config *interp, Interp_config_acc *interp_acc, unsigned int opcode, int debug)
 {
   int    n, m, i, ii, jj, nx_in, ny_in, nx_out, ny_out, tile;
   size_t nxgrid, nxgrid2;
   int mxxgrid, zero=0;
 
   CellStruct *cell_in;
-  Interp_config *tmp_interp;
 
   double total_time=0;
   clock_t time_start, time_end;
@@ -64,24 +63,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
   Minmaxavg_lists out_minmaxavg;
 
   if( opcode & READ) {
-    read_remap_file(ntiles_in,ntiles_out, grid_out, interp, opcode, nxgrid_per_input_tile);
-#ifdef _OPENACC
-    for( n=0 ; n<ntiles_out ; n++) {
-      i_in = interp[n].i_in;
-      j_in = interp[n].j_in;
-      i_out = interp[n].i_out;
-      j_out = interp[n].j_out;
-      area = interp[n].area;
-      t_in = interp[n].t_in;
-      di_in = interp[n].di_in;
-      dj_in = interp[n].dj_in;
-      nxgrid = interp[n].nxgrid;
-#pragma acc update host(i_in[0:nxgrid], j_in[0:nxgrid],   \
-                        i_out[0:nxgrid], j_out[0:nxgrid], \
-                        t_in[0:nxgrid], di_in[0:nxgrid],  \
-                        dj_in[0:nxgrid], area[0:nxgrid], interp[n].nxgrid)
-    }
-#endif
+    read_remap_file(ntiles_in,ntiles_out, grid_out, interp, opcode);
   }
   else {
 
@@ -92,14 +74,14 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 
       nx_out = grid_out[n].nxc;
       ny_out = grid_out[n].nyc;
+#ifndef _OPENACC
       interp[n].nxgrid = 0;
-      tmp_interp    = (Interp_config *)malloc(ntiles_in*sizeof(Interp_config));
+#endif
 
 #pragma acc enter data copyin(grid_out[n].lonc[0:(nx_out+1)*(ny_out+1)])
 #pragma acc enter data copyin(grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
 
 #ifdef _OPENACC
-      //allocate memory for the lists and compute the list values
       malloc_minmaxavg_lists(nx_out*ny_out, &out_minmaxavg);
       get_minmaxavg_lists(nx_out, ny_out, grid_out[n].lonc, grid_out[n].latc, &out_minmaxavg);
 #endif
@@ -114,9 +96,9 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
             do_create_xgrid_order1(n, m, grid_in, grid_out, interp, opcode, debug);
           else if(opcode & CONSERVE_ORDER2)
 #ifdef _OPENACC
-            do_create_xgrid_order2_acc(n, m, grid_in, grid_out, &out_minmaxavg, cell_in+m, interp, tmp_interp, opcode, debug);
+            do_create_xgrid_order2_acc(n, m, grid_in, grid_out, &out_minmaxavg, cell_in+m, interp_acc[n].interp_m+m, opcode, debug);
 #else
-            do_create_xgrid_order2(n, m, grid_in, grid_out, cell_in, interp, tmp_interp, opcode, debug);
+            do_create_xgrid_order2(n, m, grid_in, grid_out, cell_in, interp, opcode, debug);
 #endif
           else
             mpp_error("conserve_interp: interp_method should be CONSERVE_ORDER1 or CONSERVE_ORDER2");
@@ -127,35 +109,6 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
 #pragma acc exit data delete(grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
 #ifdef _OPENACC
       malloc_minmaxavg_lists(zero, &out_minmaxavg);
-#endif
-
-#ifdef _OPENACC
-      if( opcode & CONSERVE_ORDER2 ) {
-        if( opcode & READ) {
-        }
-        else {
-          if(debug) time_start = clock();
-          get_interp_acc(n, ntiles_in, grid_in, interp, tmp_interp, cell_in, nxgrid_per_input_tile);
-          i_in = interp[n].i_in;
-          j_in = interp[n].j_in;
-          i_out = interp[n].i_out;
-          j_out = interp[n].j_out;
-          area = interp[n].area;
-          t_in = interp[n].t_in;
-          di_in = interp[n].di_in;
-          dj_in = interp[n].dj_in;
-        }
-        nxgrid = interp[n].nxgrid;
-#pragma acc update host(i_in[0:nxgrid], j_in[0:nxgrid],   \
-                        i_out[0:nxgrid], j_out[0:nxgrid], \
-                        t_in[0:nxgrid], di_in[0:nxgrid],  \
-                        dj_in[0:nxgrid], area[0:nxgrid])
-        if(debug) {
-          time_end = clock();
-          total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
-          printf("GET_INTERP_ACC nxgrid=%d  timetaken=%f\n", nxgrid, total_time);
-        }
-      }
 #endif
 
     } // ntiles_out
@@ -629,9 +582,9 @@ void do_scalar_conserve_interp(Interp_config *interp, int varid, int ntiles_in, 
  void do_scalar_conserve_interp( )
  doing conservative interpolation
 *******************************************************************************/
-void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntiles_in, const Grid_config *grid_in,
-             int ntiles_out, const Grid_config *grid_out, const Field_config *field_in,
-                                      Field_config *field_out, unsigned int opcode, int nz, int *nxgrid_per_input_tile)
+void do_scalar_conserve_order2_interp(Interp_config_acc *interp_acc, int varid, int ntiles_in, const Grid_config *grid_in,
+                                      int ntiles_out, const Grid_config *grid_out, const Field_config *field_in,
+                                      Field_config *field_out, unsigned int opcode, int nz)
 {
   int nx1, ny1, nx2, ny2, i1, j1, i2, j2, tile, n, m, i, j, n1, n2;
   int k, n0;
@@ -653,7 +606,8 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
   int *pgrad_mask;
   double *pdata_in, *pgrad_x, *pgrad_y, *pcell_area, *pweight;
   double *pfieldin_area;
-  Interp_config *pinterp;
+  Interp_config_acc *pinterp_acc;
+  Interp_config *pinterp_m;
 
   int *start_here, *end_here;
 
@@ -677,7 +631,6 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 
   for(m=0; m<ntiles_out; m++) {
 
-    nxgrid=interp[m].nxgrid;
     nx2 = grid_out[m].nxc;
     ny2 = grid_out[m].nyc;
 
@@ -690,33 +643,17 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
     }
 #pragma acc enter data copyin( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz])
 
-    pinterp =interp+m;
-    pi_out = interp[m].i_out;
-    pj_out = interp[m].j_out;
-    pi_in = interp[m].i_in;
-    pj_in = interp[m].j_in;
-    pdi_in = interp[m].di_in;
-    pdj_in = interp[m].dj_in;
-    pt_in = interp[m].t_in;
-    parea = interp[m].area;
+    pinterp_acc = interp_acc+m;
     pdata_out = field_out[m].data;
 
 #pragma acc enter data copyin(pdata_out[0:nx2*ny2*nz])
 
-    //get indices
-    start_here = (int *)calloc(ntiles_in, sizeof(int));
-    end_here = (int *)calloc(ntiles_in, sizeof(int));
-#pragma acc enter data copyin(start_here[0:ntiles_in], end_here[0:ntiles_in])
-#pragma acc data present(nxgrid_per_input_tile[0:ntiles_in])
-#pragma acc parallel loop
-    for(int itile=0 ; itile<ntiles_in ; itile++){
-      for( int ii=0 ; ii<itile ; ii++) start_here[itile] += nxgrid_per_input_tile[ii];
-      end_here[itile] = start_here[itile] + nxgrid_per_input_tile[itile];
-    }
-
     if(has_missing) {
 
       for( int itile=0 ; itile<ntiles_in ; itile++) {
+
+        pinterp_m = pinterp_acc+m;
+
         pdata_in = field_in[itile].data;
         pgrad_x = field_in[itile].grad_x;
         pgrad_y = field_in[itile].grad_y;
@@ -726,24 +663,22 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
         pgridin_area = grid_in[itile].cell_area;
         nx1  = grid_in[itile].nx;
         ny1  = grid_in[itile].ny;
-#pragma acc data present( start_here[0:ntiles_in], end_here[0:ntiles_in] )
-#pragma acc data present( pinterp )
-#pragma acc data present( pi_out[0:nxgrid], pj_out[0:nxgrid], pi_in[0:nxgrid], pj_in[0:nxgrid], pdi_in[0:nxgrid], pdj_in[0:nxgrid] )
-#pragma acc data present( pt_in[0:nxgrid], parea[0:nxgrid])
+#pragma acc data present( pinterp_m->i_out[0:nxgrid], pinterp_m->j_out[0:nxgrid], pinterp_m->i_in[0:nxgrid], pinterp_m->j_in[0:nxgrid])
+#pragma acc data present( pinterp_m->di_in[0:nxgrid], pinterp_m->dj_in[0:nxgrid], pinterp_m->area[0:nxgrid] )
 #pragma acc data present( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz] )
 #pragma acc data copyin( pdata_in[0:(nx1+2*halo)*(ny1+2*halo)*nz], pgrad_x[0:nx1*ny1*nz], pgrad_y[0:nx1*ny1*nz])
 #pragma acc data copyin( pweight[0:nx1*ny1], pgrad_mask[0:nx1*ny1*nz])
 #pragma acc data copyin( pfieldin_area[0:nx1*ny1], pgridin_area[0:nx1*ny1])
 #pragma acc data copyin( nx2, ny2)
 #pragma acc parallel loop private(i2, j2, i1, j1, n2, n1, n0, area, di, dj, n)
-        for(n=start_here[itile]; n<end_here[itile]; n++) {
-          i2   = pi_out[n];
-          j2   = pj_out[n];
-          i1   = pi_in [n];
-          j1   = pj_in [n];
-          di   = pdi_in[n];
-          dj   = pdj_in[n];
-          area = parea [n];
+        for(n=0; n<pinterp_m->nxgrid; n++) {
+          i2   = pinterp_m->i_out[n];
+          j2   = pinterp_m->j_out[n];
+          i1   = pinterp_m->i_in[n];
+          j1   = pinterp_m->j_in[n];
+          di   = pinterp_m->di_in[n];
+          dj   = pinterp_m->dj_in[n];
+          area = pinterp_m->area [n];
 
           if(weight_exist) area *= pweight[j1*nx1+i1];
           n2 = (j1+1)*(nx1+2)+i1+1;
@@ -785,24 +720,22 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
         nx1  = grid_in[itile].nx;
         ny1  = grid_in[itile].ny;
 
-#pragma acc data present( start_here[0:ntiles_in], end_here[0:ntiles_in] )
-#pragma acc data present( pinterp )
-#pragma acc data present( pi_out[0:nxgrid], pj_out[0:nxgrid], pi_in[0:nxgrid], pj_in[0:nxgrid], pdi_in[0:nxgrid], pdj_in[0:nxgrid] )
-#pragma acc data present( pt_in[0:nxgrid], parea[0:nxgrid], pdata_out[0:nx2*ny2*nz] )
+#pragma acc data present( pinterp_m->i_out[0:nxgrid], pinterp_m->j_out[0:nxgrid], pinterp_m->i_in[0:nxgrid], pinterp_m->j_in[0:nxgrid])
+#pragma acc data present( pinterp_m->di_in[0:nxgrid], pinterp_m->dj_in[0:nxgrid], pinterp_m->area[0:nxgrid] )
 #pragma acc data present( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz] )
 #pragma acc data copyin( pdata_in[0:(nx1+2*halo)*(ny1+2*halo)*nz], pgrad_x[0:nx1*ny1*nz], pgrad_y[0:nx1*ny1*nz])
 #pragma acc data copyin( pweight[0:nx1*ny1])
 #pragma acc data copyin( pfieldin_area[0:nx1*ny1], pgridin_area[0:nx1*ny1])
 #pragma acc parallel loop private(n, k, i2, j2, i1, j1, area, n0, n1, n2, di, dj)
-        for(n=start_here[itile]; n<end_here[itile]; n++) {
+        for(n=0; n<pinterp_m->nxgrid; n++) {
 
-          i2   = pi_out[n];
-          j2   = pj_out[n];
-          i1   = pi_in [n];
-          j1   = pj_in [n];
-          di   = pdi_in[n];
-          dj   = pdj_in[n];
-          area = parea [n];
+          i2   = pinterp_m->i_out[n];
+          j2   = pinterp_m->j_out[n];
+          i1   = pinterp_m->i_in [n];
+          j1   = pinterp_m->j_in [n];
+          di   = pinterp_m->di_in[n];
+          dj   = pinterp_m->dj_in[n];
+          area = pinterp_m->area [n];
 
           if(weight_exist) area *= pweight[j1*nx1+i1];
 #pragma acc loop seq
@@ -870,18 +803,17 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
           pgridin_area = grid_in[itile].cell_area;
           pfieldin_area = field_in[itile].area;
 
-
-#pragma acc data present( pi_in[0:nxgrid], pj_in[0:nxgrid], pi_out[0:nxgrid], pj_out[0:nxgrid])
-#pragma acc data present(parea[0:nxgrid], out_area[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz])
+#pragma acc data present(pinterp_m->i_in[0:nxgrid], pinterp_m->j_in[0:nxgrid], pinterp_m->i_out[0:nxgrid], pinterp_m->j_out[0:nxgrid])
+#pragma acc data present(pinterp_m->area[0:nxgrid], out_area[0:nx2*ny2*nz], pdata_out[0:nx2*ny2*nz])
 #pragma acc data present( start_here[0:ntiles_in], end_here[0:ntiles_in] )
 #pragma acc data copyin(pgridin_area[0:nx2*ny2], pfieldin_area[0:nx2*ny2])
 #pragma acc parallel loop private( i2, j2, i1, j1, n0, n1, area )
-          for(int n=start_here[itile] ; n<end_here[itile] ; n++) {
-            i1 = pi_in[n];
-            j1 = pj_in[n];
-            i2 = pi_out[n];
-            j2 = pj_out[n];
-            area = parea[n];
+          for(int n=0 ; n<pinterp_m->nxgrid ; n++) {
+            i1 = pinterp_m->i_in[n];
+            j1 = pinterp_m->j_in[n];
+            i2 = pinterp_m->i_out[n];
+            j2 = pinterp_m->j_out[n];
+            area = pinterp_m->area[n];
             n0 = j2*nx2+i2;
             n1 = j1*nx1+i1;
             if(cell_measures )
@@ -1115,8 +1047,8 @@ void do_create_xgrid_order1( const int n, const int m,
 }
 
 void do_create_xgrid_order2_acc( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
-                                 Minmaxavg_lists *out_minmaxavg, CellStruct *cell_in, Interp_config *interp,
-                                 Interp_config *tmp_interp, unsigned int opcode, int debug )
+                                 Minmaxavg_lists *out_minmaxavg, CellStruct *cell_in, Interp_config *interp_m,
+                                 unsigned int opcode, int debug )
 {
 
   double *mask;
@@ -1167,15 +1099,14 @@ void do_create_xgrid_order2_acc( const int n, const int m, const Grid_config *gr
   if(debug) time_start = clock();
   nxgrid = create_xgrid_2dx2d_order2_acc(nx_in, ny_now, nx_out, ny_out, grid_in[m].lonc+jstart*(nx_in+1),
                                          grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc, out_minmaxavg, mask,
-                                         approx_nxgrid, counts_per_ij1, ij2_start, ij2_end, tmp_interp+m, cell_in, jstart, m);
+                                         approx_nxgrid, counts_per_ij1, ij2_start, ij2_end, interp_m, cell_in, jstart, m);
   if(debug) {
     time_end = clock();
     total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
     printf("       NXGRID=%d  tile_n=%d  tile_m=%d  time_taken=%f\n\n",nxgrid, n, m, total_time);
   }
 
-  interp[n].nxgrid += nxgrid;
-  get_interp_dij_acc(m, nx_in, ny_in, grid_in[m].cell_area, grid_in[m].latc, grid_in[m].lonc, cell_in);
+  get_interp_dij_acc(m, nx_in, ny_in, grid_in[m].cell_area, grid_in[m].latc, grid_in[m].lonc, cell_in, interp_m);
 
   acc_free(counts_per_ij1);
   acc_free(ij2_start);
@@ -1188,8 +1119,7 @@ void do_create_xgrid_order2_acc( const int n, const int m, const Grid_config *gr
 }
 
 void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
-                             CellStruct *cell_in, Interp_config *interp,
-                             Interp_config *tmp_interp, unsigned int opcode, int debug )
+                             CellStruct *cell_in, Interp_config *interp, unsigned int opcode, int debug )
 {
 
   int    *i_in=NULL, *j_in=NULL, *i_out=NULL, *j_out=NULL ;
