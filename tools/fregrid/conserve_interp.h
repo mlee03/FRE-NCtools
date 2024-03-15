@@ -22,11 +22,11 @@
 #include "globals.h"
 
 void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles_out, Grid_config *grid_out,
-                           Interp_config *interp, Interp_config_acc *interp_acc, unsigned int opcode, int debug);
+                           Interp_config *interp, unsigned int opcode, int debug);
 void do_scalar_conserve_interp(Interp_config *interp, int varid, int ntiles_in, const Grid_config *grid_in,
                   			       int ntiles_out, const Grid_config *grid_out, const Field_config *field_in,
                   			       Field_config *field_out, unsigned int opcode, int nz);
-void do_scalar_conserve_order2_interp(Interp_config_acc *interp_acc, int varid, int ntiles_in, const Grid_config *grid_in,
+void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntiles_in, const Grid_config *grid_in,
                                       int ntiles_out, const Grid_config *grid_out, const Field_config *field_in,
                                       Field_config *field_out, unsigned int opcode, int nz);
 void do_vector_conserve_interp(Interp_config *interp, int varid, int ntiles_in, const Grid_config *grid_in, int ntiles_out,
@@ -36,8 +36,8 @@ void do_create_xgrid_order1( const int n, const int m,
                              const Grid_config *grid_in, const Grid_config *grid_out,
                              Interp_config *interp, unsigned int opcode, int debug ) ;
 void do_create_xgrid_order2_acc( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
-                             Minmaxavg_lists *out_minmaxavg_lists, CellStruct *cell_in, Interp_config *interp,
-                             unsigned int opcode, int debug) ;
+                             Minmaxavg_lists *out_minmaxavg_lists, CellStruct *cell_in, Interp_config_mini *interp_mini,
+                             size_t *nxgrid, unsigned int opcode, int debug) ;
 void do_create_xgrid_order2( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
                              CellStruct *cell_in, Interp_config *interp, unsigned int opcode, int debug) ;
 void do_great_circle( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,

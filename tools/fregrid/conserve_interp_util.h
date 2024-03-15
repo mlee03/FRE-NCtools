@@ -43,7 +43,12 @@ void get_interp_dij(const int ntiles_in, const int ntiles_out,
                     const Grid_config *grid_in, CellStruct *cell_in, Interp_config *interp);
 
 void get_interp_dij_acc(const int m, const int nx_in, const int ny_in, const double *grid_area,
-                        const double *latc, const double *lonc, CellStruct *cell_in, Interp_config *interp_m);
+                        const double *latc, const double *lonc, CellStruct *cell_in, Interp_config_mini *interp_mini);
+void write_remap_acc(const int ntiles_out, const int ntiles_in, Grid_config *grid_out, Interp_config *interp,
+                        unsigned int opcode);
+
 void write_remap(const int ntiles_out, Grid_config *grid_out, Interp_config *interp, unsigned int opcode);
+
+void check_conserve(const int ntiles_out, Grid_config *grid_out, Interp_config *interp);
 
 #endif

@@ -143,6 +143,18 @@ typedef struct {
 
 typedef struct {
   size_t nxgrid;
+  int *i_in ;
+  int *j_in ;
+  int *i_out ;
+  int *j_out ;
+  int *t_in;
+  double *di_in;
+  double *dj_in;
+  double *area;
+} Interp_config_mini;
+
+typedef struct {
+  size_t nxgrid;
   int *i_in;
   int *j_in;
   int *i_out;
@@ -155,13 +167,8 @@ typedef struct {
   int    *index;
   char   remap_file[STRING];
   int    file_exist;
+  Interp_config_mini *intile;
 } Interp_config;
-
-typedef struct {
-  Interp_config *interp_m;
-  remap_file[STRING];
-  int file_exists;
-} Interp_config_acc;
 
 typedef struct {
   int nz;

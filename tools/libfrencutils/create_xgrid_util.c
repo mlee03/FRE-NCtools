@@ -49,24 +49,33 @@ void malloc_minmaxavg_lists(const int n, Minmaxavg_lists *minmaxavg)
 {
 
   if(n==0) {
-    acc_free(minmaxavg->lon_min);
-    acc_free(minmaxavg->lon_max);
-    acc_free(minmaxavg->lat_min);
-    acc_free(minmaxavg->lat_max);
-    acc_free(minmaxavg->n);
-    acc_free(minmaxavg->lon_avg);
-    acc_free(minmaxavg->lon);
-    acc_free(minmaxavg->lat);
+    free(minmaxavg->lon_min);
+    free(minmaxavg->lon_max);
+    free(minmaxavg->lat_min);
+    free(minmaxavg->lat_max);
+    free(minmaxavg->n);
+    free(minmaxavg->lon_avg);
+    free(minmaxavg->lon);
+    free(minmaxavg->lat);
+#pragma acc exit data delete( minmaxavg->lat, minmaxavg->lon, minmaxavg->lon_avg,\
+                              minmaxavg->n, minmaxavg->lat_max, minmaxavg->lat_min, \
+                              minmaxavg->lon_max, minmaxavg->lon_min)
   }
   else {
-    minmaxavg->lon_min=(double *)acc_malloc(n*sizeof(double));
-    minmaxavg->lon_max=(double *)acc_malloc(n*sizeof(double));
-    minmaxavg->lat_min=(double *)acc_malloc(n*sizeof(double));
-    minmaxavg->lat_max=(double *)acc_malloc(n*sizeof(double));
-    minmaxavg->n=(int *)acc_malloc(n*sizeof(int));
-    minmaxavg->lon_avg=(double *)acc_malloc(n*sizeof(double));
-    minmaxavg->lon=(double *)acc_malloc(MAX_V*n*sizeof(double));
-    minmaxavg->lat=(double *)acc_malloc(MAX_V*n*sizeof(double));
+    minmaxavg->lon_min=(double *)malloc(n*sizeof(double));
+    minmaxavg->lon_max=(double *)malloc(n*sizeof(double));
+    minmaxavg->lat_min=(double *)malloc(n*sizeof(double));
+    minmaxavg->lat_max=(double *)malloc(n*sizeof(double));
+    minmaxavg->n=(int *)malloc(n*sizeof(int));
+    minmaxavg->lon_avg=(double *)malloc(n*sizeof(double));
+    minmaxavg->lon=(double *)malloc(MAX_V*n*sizeof(double));
+    minmaxavg->lat=(double *)malloc(MAX_V*n*sizeof(double));
+
+#pragma acc enter data create( minmaxavg )
+#pragma acc enter data create( minmaxavg->lon_min[0:n], minmaxavg->lon_max[0:n],\
+                               minmaxavg->lat_min[0:n], minmaxavg->lat_max[0:n], \
+                               minmaxavg->n[0:n], minmaxavg->lon_avg[0:n], \
+                               minmaxavg->lat[0:MAX_V*n], minmaxavg->lon[0:MAX_V*n] )
   }
 
 }//malloc_minmaxavg_lists
@@ -79,15 +88,18 @@ void get_minmaxavg_lists(const int nx, const int ny, const double *lon, const do
                          Minmaxavg_lists *minmaxavg)
 {
 
-  int nxp, nyp;
+  int nxp, nyp, nn;
 
   nxp = nx+1;
   nyp = ny+1;
+  nn = nx*ny;
 
-#pragma acc data present(lon[0:nxp*nyp], lat[0:nxp*nyp])
-#pragma acc data deviceptr(minmaxavg->lon_min, minmaxavg->lon_max, minmaxavg->lat_min, minmaxavg->lat_max)
-#pragma acc data deviceptr(minmaxavg->n, minmaxavg->lon_avg, minmaxavg->lon, minmaxavg->lat)
-#pragma acc data copyin(nx, ny, nxp, nyp)
+#pragma acc data present(lon[0:nxp*nyp], lat[0:nxp*nyp], minmaxavg, \
+                         minmaxavg->lon_min[0:nn], minmaxavg->lon_max[0:nn], \
+                         minmaxavg->lat_min[0:nn], minmaxavg->lat_max[0:nn], \
+                         minmaxavg->n[0:nn], minmaxavg->lon_avg[0:nn],\
+                         minmaxavg->lon[0:MAX_V*nn], minmaxavg->lat[0:MAX_V*nn]) \
+                 copyin( nxp, nyp, nx, ny )
 #pragma acc parallel loop independent
   for(int ij=0; ij<nx*ny; ij++){
     int i, j, n, n0, n1, n2, n3, n_in, l;
@@ -178,7 +190,7 @@ void get_grid_area_acc(const int nlon, const int nlat, const double *lon, const 
   nxp = nlon + 1;
 
 #pragma acc data present(lon[0:(nlon+1)*(nlat+1)], lat[0:(nlon+1)*(nlat+1)])
-#pragma acc data deviceptr(area)
+#pragma acc data present(area)
 #pragma acc data copyin(nlon, nlat, nxp)
 #pragma acc parallel loop independent
   for(int j=0; j<nlat; j++) {

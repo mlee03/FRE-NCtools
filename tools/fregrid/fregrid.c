@@ -353,7 +353,6 @@ int main(int argc, char* argv[])
   File_config   *file2_out  = NULL;   /* store output file information */
   Bound_config  *bound_T    = NULL;   /* store halo update information for T-cell*/
   Interp_config *interp     = NULL;   /* store remapping information */
-  Interp_config_acc *interp_acc = NULL; /*store remapping information, used for GPU */
   int save_weight_only      = 0;
   int nthreads = 1;
 
@@ -738,11 +737,11 @@ int main(int argc, char* argv[])
   grid_in   = (Grid_config *)malloc(ntiles_in *sizeof(Grid_config));
   grid_out  = (Grid_config *)malloc(ntiles_out*sizeof(Grid_config));
   bound_T   = (Bound_config *)malloc(ntiles_in *sizeof(Bound_config));
-#ifdef _OPENACC
-  interp_acc = (Interp_config_acc *)malloc(ntiles_out*sizeof(Interp_config_acc));
-  for( int n=0 ; n<ntiles_out ; n++) interp_acc[n].interp_m = (Interp_config *)malloc( ntiles_in * sizeof(Interp_config));
-#else
   interp     = (Interp_config *)malloc(ntiles_out*sizeof(Interp_config));
+#ifdef _OPENACC
+  for( int i=0 ; i<ntiles_out ; i++ ) {
+    interp[i].intile = (Interp_config_mini *)malloc(ntiles_in*sizeof(Interp_config_mini));
+  }
 #endif
 
   if(debug) {
@@ -979,7 +978,7 @@ int main(int argc, char* argv[])
     setup_bilinear_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode, dlon_in, dlat_in, lonbegin_in, latbegin_in );
   }
   else{
-    setup_conserve_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, interp_acc, opcode, debug);
+    setup_conserve_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode, debug);
   }
    if(debug) {
      time_end = clock();
@@ -1076,7 +1075,7 @@ int main(int argc, char* argv[])
                  else{
 #ifdef _OPENACC
                    time_start_scalar=clock();
-                   do_scalar_conserve_order2_interp(interp_acc, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+                   do_scalar_conserve_order2_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
 #else
                    do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
 #endif
