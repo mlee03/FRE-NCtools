@@ -46,7 +46,7 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
   double *xgrid_area=NULL, *tmp_area=NULL, *xgrid_clon=NULL, *xgrid_clat=NULL;
   int n, i;
   int zero=0;
-  size_t nxgrid;
+  size_t nxgrid, nxgrid_acc;
   double garea;
 
   Interp_config *pinterp;
@@ -57,7 +57,7 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
 
   for(n=0; n<ntiles_out; n++) {
     if( interp[n].file_exist ) { /* reading from file */
-      int *t_in, *ind;
+      int *t_in, *ind, *ind_acc;
       int fid, vid;
 
       nxgrid     = read_mosaic_xgrid_size(interp[n].remap_file);
@@ -70,8 +70,6 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
         read_mosaic_xgrid_order2(interp[n].remap_file, i_in, j_in, i_out, j_out, xgrid_area, xgrid_clon, xgrid_clat);
 
       /*--- rescale the xgrid area */
-#pragma acc enter data copyin(xgrid_area[0:nxgrid])
-#pragma acc parallel loop present(xgrid_area[0:nxgrid]) copyin(garea,nxgrid)
       for(i=0; i<nxgrid; i++) xgrid_area[i] *= garea;
 
       fid = mpp_open(interp[n].remap_file, MPP_READ);
@@ -90,51 +88,59 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
           ind[interp[n].nxgrid++] = i;
       }
 
+      for(int i=0 ; i<nxgrid ; i++) t_in[i]--;
+
 #ifdef _OPENACC
 
       pinterp = interp+n;
 
       //OpenACC does not support array reduction yet
-      for( int i=0 ; i<nxgrid ; i++) pinterp->intile[ t_in[i] ].nxgrid++;
+      for(int m=0 ; m<ntiles_in ; m++) pinterp->intile[m].nxgrid=0;
+      for(int i=0 ; i<nxgrid ; i++) pinterp->intile[ t_in[i] ].nxgrid++;
 
       for(int m=0 ; m<ntiles_in ; m++) {
-        nxgrid = pinterp->intile[m].nxgrid;
-        pinterp->intile[m].i_in  = (int *)malloc(nxgrid*sizeof(int));
-        pinterp->intile[m].j_in  = (int *)malloc(nxgrid*sizeof(int));
-        pinterp->intile[m].i_out = (int *)malloc(nxgrid*sizeof(int));
-        pinterp->intile[m].j_out = (int *)malloc(nxgrid*sizeof(int));
-        pinterp->intile[m].area  = (double *)malloc(nxgrid*sizeof(double));
-        pinterp->intile[m].di_in = (double *)malloc(nxgrid*sizeof(double));
-        pinterp->intile[m].dj_in = (double *)malloc(nxgrid*sizeof(double));
+        nxgrid_acc = pinterp->intile[m].nxgrid;
+        pinterp->intile[m].i_in  = (int *)malloc(nxgrid_acc*sizeof(int));
+        pinterp->intile[m].j_in  = (int *)malloc(nxgrid_acc*sizeof(int));
+        pinterp->intile[m].i_out = (int *)malloc(nxgrid_acc*sizeof(int));
+        pinterp->intile[m].j_out = (int *)malloc(nxgrid_acc*sizeof(int));
+        pinterp->intile[m].area  = (double *)malloc(nxgrid_acc*sizeof(double));
+        pinterp->intile[m].di_in = (double *)malloc(nxgrid_acc*sizeof(double));
+        pinterp->intile[m].dj_in = (double *)malloc(nxgrid_acc*sizeof(double));
       }
 
+      ind_acc = (int *)calloc(ntiles_in, sizeof(int));
       for(int i=0 ; i<nxgrid ; i++) {
-        int ii, iii;
+        int ii, iii, iv;
         ii = t_in[i];
         iii = ind[i];
-        pinterp->intile[ii].t_in[i] = t_in[iii] - 1 ;
-        pinterp->intile[ii].i_in[i] = i_in[iii];
-        pinterp->intile[ii].j_in[i] = j_in[iii];
-        pinterp->intile[ii].i_out[i] = i_out[iii] - isc;
-        pinterp->intile[ii].j_out[i] = j_out[iii] - jsc;
+        iv=ind_acc[ii];
+        pinterp->intile[ii].i_in[iv] = i_in[iii];
+        pinterp->intile[ii].j_in[iv] = j_in[iii];
+        pinterp->intile[ii].i_out[iv] = i_out[iii] - isc;
+        pinterp->intile[ii].j_out[iv] = j_out[iii] - jsc;
+        pinterp->intile[ii].area[iv] = xgrid_area[iii];
         if( opcode & CONSERVE_ORDER2) {
-          pinterp->intile[ii].di_in[i] = xgrid_clon[iii];
-          pinterp->intile[ii].dj_in[i] = xgrid_clat[iii];
+          pinterp->intile[ii].di_in[iv] = xgrid_clon[iii];
+          pinterp->intile[ii].dj_in[iv] = xgrid_clat[iii];
         }
+        ind_acc[ii]++;
       }
 
 #pragma acc enter data copyin( pinterp )
       for( int m=0 ; m < ntiles_in ; m++ ) {
-        nxgrid = pinterp->intile[m].nxgrid ;
-#pragma acc enter data copyin( pinterp->intile[m] )
-#pragma acc enter data copyin( pinterp->intile[m].i_in[0:nxgrid] )
-#pragma acc enter data copyin( pinterp->intile[m].j_in[0:nxgrid] )
-#pragma acc enter data copyin( pinterp->intile[m].i_out[0:nxgrid] )
-#pragma acc enter data copyin( pinterp->intile[m].j_out[0:nxgrid] )
-#pragma acc enter data copyin( pinterp->intile[m].area[0:nxgrid] )
-#pragma acc enter data copyin( pinterp->intile[m].di_in[0:nxgrid] )
-#pragma acc enter data copyin( pinterp->intile[m].dj_in[0:nxgrid] )
+        nxgrid_acc = pinterp->intile[m].nxgrid ;
+        pinterp_mini = pinterp->intile+m;
+#pragma acc enter data copyin( pinterp_mini )
+#pragma acc enter data copyin( pinterp_mini->i_in[0:nxgrid_acc] )
+#pragma acc enter data copyin( pinterp_mini->j_in[0:nxgrid_acc] )
+#pragma acc enter data copyin( pinterp_mini->i_out[0:nxgrid_acc] )
+#pragma acc enter data copyin( pinterp_mini->j_out[0:nxgrid_acc] )
+#pragma acc enter data copyin( pinterp_mini->area[0:nxgrid_acc] )
+#pragma acc enter data copyin( pinterp_mini->di_in[0:nxgrid_acc] )
+#pragma acc enter data copyin( pinterp_mini->dj_in[0:nxgrid_acc] )
       }
+
 
 #else
       interp[n].i_in   = (int    *)malloc(interp[n].nxgrid*sizeof(int   ));
@@ -151,7 +157,7 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
       for(i=0; i< nxgrid; i++) {
         interp[n].i_in [i] = i_in [ind[i]];
         interp[n].j_in [i] = j_in [ind[i]];
-        interp[n].t_in [i] = t_in [ind[i]] - 1;
+        interp[n].t_in [i] = t_in [ind[i]];
         interp[n].i_out[i] = i_out[ind[i]] - isc;
         interp[n].j_out[i] = j_out[ind[i]] - jsc;
         interp[n].area [i] = xgrid_area[ind[i]];
@@ -440,7 +446,7 @@ void get_interp_dij_acc(const int m, const int nx_in, const int ny_in, const dou
   n = nx_in * ny_in;
   nxgrid = interp_mini->nxgrid;
 
-#pragma acc data present(cell_in->clon[0:n], cell_in->clat[0:n], cell_in->area[0:n],\
+#pragma acc data present(cell_in[0:1], cell_in->clon[0:n], cell_in->clat[0:n], cell_in->area[0:n], \
                          grid_area[0:n], latc[0:nxp*nyp], lonc[0:nxp*nyp] )
 #pragma acc parallel loop collapse(2)
   for(int j=0; j<ny_in; j++) {
@@ -472,7 +478,7 @@ void get_interp_dij_acc(const int m, const int nx_in, const int ny_in, const dou
     }
   }
 
-#pragma acc data present(cell_in->clon[0:n], cell_in->clat[0:n],        \
+#pragma acc data present(cell_in[0:1], cell_in->clon[0:n], cell_in->clat[0:n], interp_mini[0:1], \
                          interp_mini->j_in[0:nxgrid], interp_mini->i_in[0:nxgrid], \
                          interp_mini->di_in[0:nxgrid], interp_mini->dj_in[0:nxgrid])
 #pragma acc parallel loop
@@ -739,4 +745,53 @@ void check_conserve(const int ntiles_out, Grid_config *grid_out, Interp_config *
            max_i, max_j, max_ratio, grid_out[n].cell_area[ii],area2[ii]);
   }
     free(area2);
+}
+
+
+void check_conserve_acc(const int ntiles_out, const int ntiles_in, Grid_config *grid_out, Interp_config *interp)
+{
+
+  int nx2, ny2, max_i, max_j, i, j, ii, n;
+  double max_ratio, ratio_change;
+  double *area2;
+
+  Interp_config_mini *pinterp;
+
+  /* sum over exchange grid to get the area of grid_in */
+  nx2  = grid_out[0].nxc;
+  ny2  = grid_out[0].nyc;
+
+  area2 = (double *)malloc(nx2*ny2*sizeof(double));
+
+  for(n=0; n<ntiles_out; n++) {
+    for(i=0; i<nx2*ny2; i++) area2[i] = 0;
+    for(int itile=0 ; itile<ntiles_in ; itile++) {
+      pinterp= interp[n].intile+itile;
+      for(i=0; i<pinterp->nxgrid; i++) {
+        ii = pinterp->j_out[i]*nx2 + pinterp->i_out[i];
+        area2[ii] +=  pinterp->area[i];
+      }
+    }
+    max_ratio = 0;
+    max_i = 0;
+    max_j = 0;
+    /* comparing area1 and area2 */
+    for(j=0; j<ny2; j++) for(i=0; i<nx2; i++) {
+        ii = j*nx2+i;
+        ratio_change = fabs(grid_out[n].cell_area[ii]-area2[ii])/grid_out[n].cell_area[ii];
+        if(ratio_change > max_ratio) {
+          max_ratio = ratio_change;
+          max_i = i;
+          max_j = j;
+        }
+        if( ratio_change > 1.e-4 ) {
+          printf("(i,j)=(%d,%d), change = %g, area1=%g, area2=%g\n", i, j, ratio_change, grid_out[n].cell_area[ii],area2[ii]);
+        }
+      }
+    ii = max_j*nx2+max_i;
+    printf("The maximum ratio change at (%d,%d) = %g, area1=%g, area2=%g\n",
+           max_i, max_j, max_ratio, grid_out[n].cell_area[ii],area2[ii]);
+  }
+  free(area2);
+
 }

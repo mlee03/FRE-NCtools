@@ -51,4 +51,6 @@ void write_remap(const int ntiles_out, Grid_config *grid_out, Interp_config *int
 
 void check_conserve(const int ntiles_out, Grid_config *grid_out, Interp_config *interp);
 
+void check_conserve_acc(const int ntiles_out, const int ntiles_in, Grid_config *grid_out, Interp_config *interp);
+
 #endif

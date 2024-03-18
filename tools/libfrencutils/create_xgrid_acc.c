@@ -322,6 +322,7 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_in, const int nlat_in, const in
 #pragma acc exit data delete(area_in, area_out)
  free(area_in); free(area_out);
 
+ interp_mini->nxgrid = 0;
  if(nxgrid>0) {
    interp_mini->nxgrid = nxgrid;
    interp_mini->i_in = (int *)malloc(nxgrid*sizeof(int));
@@ -332,7 +333,7 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_in, const int nlat_in, const in
    interp_mini->area = (double *)malloc(nxgrid*sizeof(double));
    interp_mini->di_in = (double *)malloc(nxgrid*sizeof(double));
    interp_mini->dj_in = (double *)malloc(nxgrid*sizeof(double));
-#pragma acc enter data copyin(interp_mini) \
+#pragma acc enter data copyin(interp_mini[0:1])                           \
                        create(interp_mini->i_in[0:nxgrid], interp_mini->j_in[0:nxgrid],      \
                               interp_mini->i_out[0:nxgrid], interp_mini->j_out[0:nxgrid], interp_mini->t_in[0:nxgrid], \
                               interp_mini->area[0:nxgrid], interp_mini->di_in[0:nxgrid],interp_mini->dj_in[0:nxgrid])
