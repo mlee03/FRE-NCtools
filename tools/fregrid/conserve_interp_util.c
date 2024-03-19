@@ -162,7 +162,7 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
         interp[n].area [i] = xgrid_area[ind[i]];
       }
       if(opcode & CONSERVE_ORDER2) {
-        for(i=0; i< nxgrid; i++) {
+        for(i=0; i< interp[n].nxgrid; i++) {
           interp[n].di_in[i] = xgrid_clon[ind[i]];
           interp[n].dj_in[i] = xgrid_clat[ind[i]];
         }
