@@ -58,11 +58,11 @@ int prepare_create_xgrid_2dx2d_order2_acc(const int nlon_in, const int nlat_in, 
   approx_nxgrid = 0;
 
 #pragma acc data present(lon_out[0:nx2p*ny2p], lat_out[0:nx2p*ny2p], lon_in[0:nx1p*ny1p], lat_in[0:nx1p*ny1p], \
-                         out_minmaxavg->lon_min[0:n2], out_minmaxavg->lon_max[0:n2], out_minmaxavg->lat_min[0:n2], \
-                         out_minmaxavg->lat_max[0:n2], out_minmaxavg->n[0:n2], out_minmaxavg->lon[0:n2], \
-                         out_minmaxavg->lat[0:n2], out_minmaxavg->lon_avg[0:n2], counts_per_ij1[0:n1], \
-                         ij2_start[0:n1], ij2_end[0:n1], mask_in[0:n1]) \
-                copy(approx_nxgrid)
+                         out_minmaxavg[0:1], out_minmaxavg->lon_min[0:n2], out_minmaxavg->lon_max[0:n2], \
+                         out_minmaxavg->lat_min[0:n2], out_minmaxavg->lat_max[0:n2], out_minmaxavg->n[0:n2], \
+                         out_minmaxavg->lon[0:n2],out_minmaxavg->lat[0:n2], out_minmaxavg->lon_avg[0:n2], \
+                         counts_per_ij1[0:n1], ij2_start[0:n1], ij2_end[0:n1], mask_in[0:n1]) \
+                   copy(approx_nxgrid)
 #pragma acc parallel
 {
 #pragma acc loop independent reduction(+:approx_nxgrid)
@@ -198,6 +198,7 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_in, const int nlat_in, const in
   nxgrid = 0;
 
 #pragma acc data present(lon_out[0:nx2p*ny2p], lat_out[0:nx2p*ny2p], lon_in[0:nx1p*ny1p], lat_in[0:nx1p*ny1p],\
+                         cell_in[0:1], out_minmaxavg[0:1],              \
                          cell_in->clat[0:n1], cell_in->clon[0:n1], cell_in->clat[0:n1], \
                          out_minmaxavg->lon_max[0:n2], out_minmaxavg->lon_min[0:n2], out_minmaxavg->lat_max[0:n2],\
                          out_minmaxavg->lat_min[0:n2], out_minmaxavg->n[0:n2], out_minmaxavg->lon[0:n2], \

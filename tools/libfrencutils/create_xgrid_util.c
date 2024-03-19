@@ -71,7 +71,7 @@ void malloc_minmaxavg_lists(const int n, Minmaxavg_lists *minmaxavg)
     minmaxavg->lon=(double *)malloc(MAX_V*n*sizeof(double));
     minmaxavg->lat=(double *)malloc(MAX_V*n*sizeof(double));
 
-#pragma acc enter data create( minmaxavg )
+#pragma acc enter data create( minmaxavg[0:1] )
 #pragma acc enter data create( minmaxavg->lon_min[0:n], minmaxavg->lon_max[0:n],\
                                minmaxavg->lat_min[0:n], minmaxavg->lat_max[0:n], \
                                minmaxavg->n[0:n], minmaxavg->lon_avg[0:n], \
@@ -94,7 +94,7 @@ void get_minmaxavg_lists(const int nx, const int ny, const double *lon, const do
   nyp = ny+1;
   nn = nx*ny;
 
-#pragma acc data present(lon[0:nxp*nyp], lat[0:nxp*nyp], minmaxavg, \
+#pragma acc data present(lon[0:nxp*nyp], lat[0:nxp*nyp], minmaxavg[0:1],    \
                          minmaxavg->lon_min[0:nn], minmaxavg->lon_max[0:nn], \
                          minmaxavg->lat_min[0:nn], minmaxavg->lat_max[0:nn], \
                          minmaxavg->n[0:nn], minmaxavg->lon_avg[0:nn],\

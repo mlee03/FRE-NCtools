@@ -101,34 +101,27 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
         } // opcode GREAT_CIRCLE or CONSERVE_ORDERs
       } // ntiles_in
 
-#pragma acc exit data delete(grid_out[n].lonc[0:(nx_out+1)*(ny_out+1)],\
-                             grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
 #ifdef _OPENACC
+#pragma acc exit data delete(grid_out[n].lonc[0:(nx_out+1)*(ny_out+1)], \
+                             grid_out[n].latc[0:(nx_out+1)*(ny_out+1)])
       malloc_minmaxavg_lists(zero, &out_minmaxavg);
 #endif
+
     } // ntiles_out
 
-#ifndef _OPENACC
-    if(opcode & CONSERVE_ORDER2) get_interp_dij(ntiles_in, ntiles_out, grid_in, cell_in, interp);
-#endif
-
     /* write out remapping information */
+    /* check the input area match exchange grid area */
 #ifdef _OPENACC
     if( opcode & WRITE) write_remap_acc(ntiles_out, ntiles_in, grid_out, interp, opcode);
+    if(opcode & CHECK_CONSERVE) check_conserve_acc(ntiles_out, ntiles_in, grid_out, interp);
 #else
+    if(opcode & CONSERVE_ORDER2) get_interp_dij(ntiles_in, ntiles_out, grid_in, cell_in, interp);
     if( opcode & WRITE) write_remap(ntiles_out, grid_out, interp, opcode);
+    if(opcode & CHECK_CONSERVE) check_conserve(ntiles_out, grid_out, interp);
 #endif
   }
-  if(mpp_pe() == mpp_root_pe())printf("NOTE: done calculating index and weight for conservative interpolation\n");
 
-  /* check the input area match exchange grid area */
-  if(opcode & CHECK_CONSERVE) {
-#ifdef _OPENACC
-    check_conserve_acc(ntiles_out, ntiles_in, grid_out, interp);
-#else
-    check_conserve(ntiles_out, grid_out, interp);
-#endif
-  }
+  if(mpp_pe() == mpp_root_pe())printf("NOTE: done calculating index and weight for conservative interpolation\n");
 
 }; /* setup_conserve_interp */
 
