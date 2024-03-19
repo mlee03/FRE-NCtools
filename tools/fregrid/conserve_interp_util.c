@@ -88,10 +88,9 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
           ind[interp[n].nxgrid++] = i;
       }
 
-      for(int i=0 ; i<nxgrid ; i++) t_in[i]--;
-
 #ifdef _OPENACC
 
+      for(int i=0 ; i<nxgrid ; i++) t_in[i]--;
       pinterp = interp+n;
 
       //OpenACC does not support array reduction yet
@@ -154,10 +153,10 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
         interp[n].dj_in   = (double *)malloc(interp[n].nxgrid*sizeof(double));
       }
 
-      for(i=0; i< nxgrid; i++) {
+      for(i=0; i< interp[n].nxgrid; i++) {
         interp[n].i_in [i] = i_in [ind[i]];
         interp[n].j_in [i] = j_in [ind[i]];
-        interp[n].t_in [i] = t_in [ind[i]];
+        interp[n].t_in [i] = t_in [ind[i]] - 1;
         interp[n].i_out[i] = i_out[ind[i]] - isc;
         interp[n].j_out[i] = j_out[ind[i]] - jsc;
         interp[n].area [i] = xgrid_area[ind[i]];
