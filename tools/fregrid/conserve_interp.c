@@ -84,21 +84,20 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
       //START NTILES_IN
       for(m=0; m<ntiles_in; m++) {
 
-        if(opcode & GREAT_CIRCLE)
-          do_great_circle(n, m, grid_in, grid_out, interp, opcode) ;
+        if(opcode & GREAT_CIRCLE) do_great_circle(n, m, grid_in, grid_out, interp, opcode) ;
         else {
+#ifdef _OPENACC
+          do_create_xgrid_order_acc(n, m, grid_in, grid_out, &out_minmaxavg, interp[n].intile+m, &(interp[n].nxgrid), opcode, debug);
+#else
           if(opcode & CONSERVE_ORDER1)
             do_create_xgrid_order1(n, m, grid_in, grid_out, interp, opcode, debug);
-          else if(opcode & CONSERVE_ORDER2) {
-#ifdef _OPENACC
-            do_create_xgrid_order2_acc(n, m, grid_in, grid_out, &out_minmaxavg, interp[n].intile+m, &(interp[n].nxgrid), opcode, debug);
-#else
+          else if(opcode & CONSERVE_ORDER2)
             do_create_xgrid_order2(n, m, grid_in, grid_out, cell_in, interp, opcode, debug);
-#endif
-          }
           else
             mpp_error("conserve_interp: interp_method should be CONSERVE_ORDER1 or CONSERVE_ORDER2");
+#endif
         } // opcode GREAT_CIRCLE or CONSERVE_ORDERs
+
       } // ntiles_in
 
 #ifdef _OPENACC
@@ -119,6 +118,7 @@ void setup_conserve_interp(int ntiles_in, const Grid_config *grid_in, int ntiles
     if( opcode & WRITE) write_remap(ntiles_out, grid_out, interp, opcode);
     if(opcode & CHECK_CONSERVE) check_conserve(ntiles_out, grid_out, interp);
 #endif
+
   }
 
   if(mpp_pe() == mpp_root_pe())printf("NOTE: done calculating index and weight for conservative interpolation\n");
@@ -195,14 +195,14 @@ void do_scalar_conserve_interp(Interp_config *interp, int varid, int ntiles_in, 
     area = interp[m].area [n];
     nx1  = grid_in[tile].nx;
     ny1  = grid_in[tile].ny;
-          if(weight_exist) area *= grid_in[tile].weight[j1*nx1+i1];
+    if(weight_exist) area *= grid_in[tile].weight[j1*nx1+i1];
     n1 = j1*nx1+i1;
     n0 = j2*nx2+i2;
 
     if( field_in[tile].data[n1] != missing ) {
       if( cell_methods == CELL_METHODS_SUM )
         area /= grid_in[tile].cell_area[n1];
-            else if( cell_measures ) {
+      else if( cell_measures ) {
         if(field_in[tile].area[n1] == area_missing) {
            printf("name=%s,tile=%d,i1,j1=%d,%d,i2,j2=%d,%d\n",field_in->var[varid].name,tile,i1,j1,i2,j2);
            mpp_error("conserve_interp: data is not missing but area is missing");
@@ -216,28 +216,28 @@ void do_scalar_conserve_interp(Interp_config *interp, int varid, int ntiles_in, 
         }
       }
       else {
-  for(n=0; n<interp[m].nxgrid; n++) {
-    i2   = interp[m].i_out[n];
-    j2   = interp[m].j_out[n];
-    i1   = interp[m].i_in [n];
-    j1   = interp[m].j_in [n];
-    tile = interp[m].t_in [n];
-    area = interp[m].area [n];
-    nx1  = grid_in[tile].nx;
-    ny1  = grid_in[tile].ny;
-    if(weight_exist) area *= grid_in[tile].weight[j1*nx1+i1];
-    for(k=0; k<nz; k++) {
-      n1 = k*nx1*ny1 + j1*nx1+i1;
-      n0 = k*nx2*ny2 + j2*nx2+i2;
-      if(  cell_methods == CELL_METHODS_SUM )
-        area /= grid_in[tile].cell_area[n1];
+        for(n=0; n<interp[m].nxgrid; n++) {
+          i2   = interp[m].i_out[n];
+          j2   = interp[m].j_out[n];
+          i1   = interp[m].i_in [n];
+          j1   = interp[m].j_in [n];
+          tile = interp[m].t_in [n];
+          area = interp[m].area [n];
+          nx1  = grid_in[tile].nx;
+          ny1  = grid_in[tile].ny;
+          if(weight_exist) area *= grid_in[tile].weight[j1*nx1+i1];
+          for(k=0; k<nz; k++) {
+            n1 = k*nx1*ny1 + j1*nx1+i1;
+            n0 = k*nx2*ny2 + j2*nx2+i2;
+            if(  cell_methods == CELL_METHODS_SUM )
+              area /= grid_in[tile].cell_area[n1];
             else if( cell_measures )
-        area *= (field_in[tile].area[n1]/grid_in[tile].cell_area[n1]);
-        field_out[m].data[n0] += (field_in[tile].data[n1]*area);
-      out_area[n0] += area;
-      out_miss[n0] = 1;
-    }
-  }
+              area *= (field_in[tile].area[n1]/grid_in[tile].cell_area[n1]);
+            field_out[m].data[n0] += (field_in[tile].data[n1]*area);
+            out_area[n0] += area;
+            out_miss[n0] = 1;
+          }
+        }
       }
     }
     else if(monotonic) {
@@ -245,202 +245,202 @@ void do_scalar_conserve_interp(Interp_config *interp, int varid, int ntiles_in, 
       double f_bar;
       double *xdata;
       for(n=0; n<ntiles_in; n++) {
-  nx1 =  grid_in[n].nx;
-  ny1 =  grid_in[n].ny;
-  monotone_data[n].f_bar_max = (double *)malloc(nx1*ny1*sizeof(double));
-  monotone_data[n].f_bar_min = (double *)malloc(nx1*ny1*sizeof(double));
-  monotone_data[n].f_max     = (double *)malloc(nx1*ny1*sizeof(double));
-  monotone_data[n].f_min     = (double *)malloc(nx1*ny1*sizeof(double));
-  for(j=0; j<ny1; j++) for(i=0; i<nx1; i++) {
-    n1 = j*nx1+i;
+        nx1 =  grid_in[n].nx;
+        ny1 =  grid_in[n].ny;
+        monotone_data[n].f_bar_max = (double *)malloc(nx1*ny1*sizeof(double));
+        monotone_data[n].f_bar_min = (double *)malloc(nx1*ny1*sizeof(double));
+        monotone_data[n].f_max     = (double *)malloc(nx1*ny1*sizeof(double));
+        monotone_data[n].f_min     = (double *)malloc(nx1*ny1*sizeof(double));
+        for(j=0; j<ny1; j++) for(i=0; i<nx1; i++) {
+            n1 = j*nx1+i;
 
-    monotone_data[n].f_bar_max[n1] = -MAXVAL;
-    monotone_data[n].f_bar_min[n1] = MAXVAL;
-    monotone_data[n].f_max[n1]     = -MAXVAL;
-    monotone_data[n].f_min[n1]     = MAXVAL;
-    n1 = j*nx1+i;
-    for(jj=j-1; jj<=j+1; jj++) for(ii=i-1; ii<=i+1; ii++) {
-      n2 = (jj+1)*(nx1+2)+ii+1;
-      if( field_in[n].data[n2] != missing ) {
-        if( field_in[n].data[n2] > monotone_data[n].f_bar_max[n1] ) monotone_data[n].f_bar_max[n1] = field_in[n].data[n2];
-        if( field_in[n].data[n2] < monotone_data[n].f_bar_min[n1] ) monotone_data[n].f_bar_min[n1] = field_in[n].data[n2];
-      }
-    }
-  }
+            monotone_data[n].f_bar_max[n1] = -MAXVAL;
+            monotone_data[n].f_bar_min[n1] = MAXVAL;
+            monotone_data[n].f_max[n1]     = -MAXVAL;
+            monotone_data[n].f_min[n1]     = MAXVAL;
+            n1 = j*nx1+i;
+            for(jj=j-1; jj<=j+1; jj++) for(ii=i-1; ii<=i+1; ii++) {
+                n2 = (jj+1)*(nx1+2)+ii+1;
+                if( field_in[n].data[n2] != missing ) {
+                  if( field_in[n].data[n2] > monotone_data[n].f_bar_max[n1] ) monotone_data[n].f_bar_max[n1] = field_in[n].data[n2];
+                  if( field_in[n].data[n2] < monotone_data[n].f_bar_min[n1] ) monotone_data[n].f_bar_min[n1] = field_in[n].data[n2];
+                }
+              }
+          }
       }
 
       xdata = (double *)malloc(interp[m].nxgrid*sizeof(double));
       for(n=0; n<interp[m].nxgrid; n++) {
-  i1   = interp[m].i_in [n];
-  j1   = interp[m].j_in [n];
-  di   = interp[m].di_in[n];
-  dj   = interp[m].dj_in[n];
-  tile = interp[m].t_in [n];
-  n1 = j1*nx1+i1;
+        i1   = interp[m].i_in [n];
+        j1   = interp[m].j_in [n];
+        di   = interp[m].di_in[n];
+        dj   = interp[m].dj_in[n];
+        tile = interp[m].t_in [n];
+        n1 = j1*nx1+i1;
         n2 = (j1+1)*(nx1+2)+i1+1;
-  if( field_in[tile].data[n2] != missing ) {
-    if( field_in[tile].grad_mask[n1] ) { /* use zero gradient */
-      xdata[n] = field_in[tile].data[n2];
-    }
-    else {
-      xdata[n] = field_in[tile].data[n2]+field_in[tile].grad_x[n1]*di+field_in[tile].grad_y[n1]*dj;
-    }
-    if(monotonic) {
-      if( xdata[n] > monotone_data[tile].f_max[n1]) monotone_data[tile].f_max[n1] = xdata[n];
-      if( xdata[n] < monotone_data[tile].f_min[n1]) monotone_data[tile].f_min[n1] = xdata[n];
-    }
-  }
-  else
-    xdata[n] = missing;
+        if( field_in[tile].data[n2] != missing ) {
+          if( field_in[tile].grad_mask[n1] ) { /* use zero gradient */
+            xdata[n] = field_in[tile].data[n2];
+          }
+          else {
+            xdata[n] = field_in[tile].data[n2]+field_in[tile].grad_x[n1]*di+field_in[tile].grad_y[n1]*dj;
+          }
+          if(monotonic) {
+            if( xdata[n] > monotone_data[tile].f_max[n1]) monotone_data[tile].f_max[n1] = xdata[n];
+            if( xdata[n] < monotone_data[tile].f_min[n1]) monotone_data[tile].f_min[n1] = xdata[n];
+          }
+        }
+        else
+          xdata[n] = missing;
       }
 
       /* get the global f_max and f_min */
       if(mpp_npes() >1) {
-  for(n=0; n<ntiles_in; n++) {
-    mpp_min_double(nx1*ny1, monotone_data[n].f_min);
-    mpp_max_double(nx1*ny1, monotone_data[n].f_max);
-  }
+        for(n=0; n<ntiles_in; n++) {
+          mpp_min_double(nx1*ny1, monotone_data[n].f_min);
+          mpp_max_double(nx1*ny1, monotone_data[n].f_max);
+        }
       }
 
       /* adjust the exchange grid cell data to make it monotonic */
       for(n=0; n<interp[m].nxgrid; n++) {
-  i1   = interp[m].i_in [n];
-  j1   = interp[m].j_in [n];
-  tile = interp[m].t_in [n];
-  n1 = j1*nx1+i1;
-  n2 = (j1+1)*(nx1+2)+i1+1;
-  f_bar = field_in[tile].data[n2];
-  if(xdata[n] == missing) continue;
+        i1   = interp[m].i_in [n];
+        j1   = interp[m].j_in [n];
+        tile = interp[m].t_in [n];
+        n1 = j1*nx1+i1;
+        n2 = (j1+1)*(nx1+2)+i1+1;
+        f_bar = field_in[tile].data[n2];
+        if(xdata[n] == missing) continue;
 
-  if( monotone_data[tile].f_max[n1] > monotone_data[tile].f_bar_max[n1] ) {
-    /* z1l: Due to truncation error, we might get xdata[n] > f_bar_max[n1]. So
-       we allow some tolerance. What is the suitable tolerance? */
-    xdata[n] = f_bar + ((xdata[n]-f_bar)/(monotone_data[tile].f_max[n1]-f_bar))
-      * (monotone_data[tile].f_bar_max[n1]-f_bar);
-    if( xdata[n] > monotone_data[tile].f_bar_max[n1]) {
-      if(xdata[n] - monotone_data[tile].f_bar_max[n1] < TOLERANCE ) xdata[n] = monotone_data[tile].f_bar_max[n1];
-      if( xdata[n] > monotone_data[tile].f_bar_max[n1]) {
-        printf(" n = %d, n1 = %d, xdata = %f, f_bar_max=%f\n", n, n1, xdata[n], monotone_data[tile].f_bar_max[n1]);
-        mpp_error(" xdata is greater than f_bar_max ");
-      }
-    }
-  }
-  else if( monotone_data[tile].f_min[n1] < monotone_data[tile].f_bar_min[n1] ) {
-    /* z1l: Due to truncation error, we might get xdata[n] < f_bar_min[n1]. So
-       we allow some tolerance. What is the suitable tolerance? */
-    xdata[n] = f_bar + ((xdata[n]-f_bar)/(monotone_data[tile].f_min[n1]-f_bar)) * (monotone_data[tile].f_bar_min[n1]-f_bar);
-    if( xdata[n] < monotone_data[tile].f_bar_min[n1]) {
-      if(monotone_data[tile].f_bar_min[n1] - xdata[n]< TOLERANCE ) xdata[n] = monotone_data[tile].f_bar_min[n1];
-      if( xdata[n] < monotone_data[tile].f_bar_min[n1]) {
-        printf(" n = %d, n1 = %d, xdata = %f, f_bar_min=%f\n", n, n1, xdata[n], monotone_data[tile].f_bar_min[n1]);
-        mpp_error(" xdata is less than f_bar_min ");
-      }
-    }
-  }
+        if( monotone_data[tile].f_max[n1] > monotone_data[tile].f_bar_max[n1] ) {
+          /* z1l: Due to truncation error, we might get xdata[n] > f_bar_max[n1]. So
+             we allow some tolerance. What is the suitable tolerance? */
+          xdata[n] = f_bar + ((xdata[n]-f_bar)/(monotone_data[tile].f_max[n1]-f_bar))
+            * (monotone_data[tile].f_bar_max[n1]-f_bar);
+          if( xdata[n] > monotone_data[tile].f_bar_max[n1]) {
+            if(xdata[n] - monotone_data[tile].f_bar_max[n1] < TOLERANCE ) xdata[n] = monotone_data[tile].f_bar_max[n1];
+            if( xdata[n] > monotone_data[tile].f_bar_max[n1]) {
+              printf(" n = %d, n1 = %d, xdata = %f, f_bar_max=%f\n", n, n1, xdata[n], monotone_data[tile].f_bar_max[n1]);
+              mpp_error(" xdata is greater than f_bar_max ");
+            }
+          }
+        }
+        else if( monotone_data[tile].f_min[n1] < monotone_data[tile].f_bar_min[n1] ) {
+          /* z1l: Due to truncation error, we might get xdata[n] < f_bar_min[n1]. So
+             we allow some tolerance. What is the suitable tolerance? */
+          xdata[n] = f_bar + ((xdata[n]-f_bar)/(monotone_data[tile].f_min[n1]-f_bar)) * (monotone_data[tile].f_bar_min[n1]-f_bar);
+          if( xdata[n] < monotone_data[tile].f_bar_min[n1]) {
+            if(monotone_data[tile].f_bar_min[n1] - xdata[n]< TOLERANCE ) xdata[n] = monotone_data[tile].f_bar_min[n1];
+            if( xdata[n] < monotone_data[tile].f_bar_min[n1]) {
+              printf(" n = %d, n1 = %d, xdata = %f, f_bar_min=%f\n", n, n1, xdata[n], monotone_data[tile].f_bar_min[n1]);
+              mpp_error(" xdata is less than f_bar_min ");
+            }
+          }
+        }
       }
       for(n=0; n<ntiles_in; n++) {
-  free(monotone_data[n].f_bar_max);
-  free(monotone_data[n].f_bar_min);
-  free(monotone_data[n].f_max);
-  free(monotone_data[n].f_min);
+        free(monotone_data[n].f_bar_max);
+        free(monotone_data[n].f_bar_min);
+        free(monotone_data[n].f_max);
+        free(monotone_data[n].f_min);
       }
 
       /* remap onto destination grid */
       for(n=0; n<interp[m].nxgrid; n++) {
-  i2   = interp[m].i_out[n];
-  j2   = interp[m].j_out[n];
-  i1   = interp[m].i_in [n];
-  j1   = interp[m].j_in [n];
-  tile = interp[m].t_in [n];
-  area = interp[m].area [n];
-  if(xdata[n] == missing) continue;
-  if(weight_exist) area *= grid_in[tile].weight[j1*nx1+i1];
-  n1 = j1*nx1+i1;
-  n0 = j2*nx2+i2;
-  if( cell_methods == CELL_METHODS_SUM )
-    area /= grid_in[tile].cell_area[n1];
-  else if( cell_measures )
-    area *= (field_in[tile].area[n1]/grid_in[tile].cell_area[n1]);
-  field_out[m].data[n0] += xdata[n]*area;
-  out_area[n0] += area;
+        i2   = interp[m].i_out[n];
+        j2   = interp[m].j_out[n];
+        i1   = interp[m].i_in [n];
+        j1   = interp[m].j_in [n];
+        tile = interp[m].t_in [n];
+        area = interp[m].area [n];
+        if(xdata[n] == missing) continue;
+        if(weight_exist) area *= grid_in[tile].weight[j1*nx1+i1];
+        n1 = j1*nx1+i1;
+        n0 = j2*nx2+i2;
+        if( cell_methods == CELL_METHODS_SUM )
+          area /= grid_in[tile].cell_area[n1];
+        else if( cell_measures )
+          area *= (field_in[tile].area[n1]/grid_in[tile].cell_area[n1]);
+        field_out[m].data[n0] += xdata[n]*area;
+        out_area[n0] += area;
       }
       free(xdata);
     }
     else {
       if(has_missing) {
-  for(n=0; n<interp[m].nxgrid; n++) {
-    i2   = interp[m].i_out[n];
-    j2   = interp[m].j_out[n];
-    i1   = interp[m].i_in [n];
-    j1   = interp[m].j_in [n];
-    di   = interp[m].di_in[n];
-    dj   = interp[m].dj_in[n];
-    tile = interp[m].t_in [n];
-    area = interp[m].area [n];
-    nx1  = grid_in[tile].nx;
-    ny1  = grid_in[tile].ny;
+        for(n=0; n<interp[m].nxgrid; n++) {
+          i2   = interp[m].i_out[n];
+          j2   = interp[m].j_out[n];
+          i1   = interp[m].i_in [n];
+          j1   = interp[m].j_in [n];
+          di   = interp[m].di_in[n];
+          dj   = interp[m].dj_in[n];
+          tile = interp[m].t_in [n];
+          area = interp[m].area [n];
+          nx1  = grid_in[tile].nx;
+          ny1  = grid_in[tile].ny;
 
-    if(weight_exist) area *= grid_in[tile].weight[j1*nx1+i1];
-    n2 = (j1+1)*(nx1+2)+i1+1;
-    n0 = j2*nx2+i2;
-    if( field_in[tile].data[n2] != missing ) {
-      n1 = j1*nx1+i1;
-      n0 = j2*nx2+i2;
+          if(weight_exist) area *= grid_in[tile].weight[j1*nx1+i1];
+          n2 = (j1+1)*(nx1+2)+i1+1;
+          n0 = j2*nx2+i2;
+          if( field_in[tile].data[n2] != missing ) {
+            n1 = j1*nx1+i1;
+            n0 = j2*nx2+i2;
             if( cell_methods == CELL_METHODS_SUM )
-        area /= grid_in[tile].cell_area[n1];
+              area /= grid_in[tile].cell_area[n1];
             else if( cell_measures ) {
-        if(field_in[tile].area[n1] == area_missing) {
+              if(field_in[tile].area[n1] == area_missing) {
                 printf("name=%s,tile=%d,i1,j1=%d,%d,i2,j2=%d,%d\n",field_in->var[varid].name,tile,i1,j1,i2,j2);
-          mpp_error("conserve_interp: data is not missing but area is missing");
+                mpp_error("conserve_interp: data is not missing but area is missing");
               }
-        area *= (field_in[tile].area[n1]/grid_in[tile].cell_area[n1]);
+              area *= (field_in[tile].area[n1]/grid_in[tile].cell_area[n1]);
             }
-      if(field_in[tile].grad_mask[n1]) { /* use zero gradient */
-        field_out[m].data[n0] += field_in[tile].data[n2]*area;
-      }
-      else {
-        field_out[m].data[n0] += (field_in[tile].data[n2]+field_in[tile].grad_x[n1]*di
-          +field_in[tile].grad_y[n1]*dj)*area;
-      }
-      out_area[n0] += area;
-      out_miss[n0] = 1;
-    }
-  }
-      }
-      else {
-  for(n=0; n<interp[m].nxgrid; n++) {
-    i2   = interp[m].i_out[n];
-    j2   = interp[m].j_out[n];
-    i1   = interp[m].i_in [n];
-    j1   = interp[m].j_in [n];
-    di   = interp[m].di_in[n];
-    dj   = interp[m].dj_in[n];
-    tile = interp[m].t_in [n];
-    area = interp[m].area [n];
-
-    nx1  = grid_in[tile].nx;
-    ny1  = grid_in[tile].ny;
-    if(weight_exist) area *= grid_in[tile].weight[j1*nx1+i1];
-    for(k=0; k<nz; k++) {
-      n0 = k*nx2*ny2 + j2*nx2+i2;
-      n1 = k*nx1*ny1+j1*nx1+i1;
-      n2 = k*(nx1+2)*(ny1+2)+(j1+1)*(nx1+2)+i1+1;
-      if( cell_methods == CELL_METHODS_SUM )
-        area /= grid_in[tile].cell_area[n1];
-      else if( cell_measures )
-        area *= (field_in[tile].area[n1]/grid_in[tile].cell_area[n1]);
-      field_out[m].data[n0] += (field_in[tile].data[n2]+field_in[tile].grad_x[n1]*di
-              +field_in[tile].grad_y[n1]*dj)*area;
-      out_area[n0] += area;
+            if(field_in[tile].grad_mask[n1]) { /* use zero gradient */
+              field_out[m].data[n0] += field_in[tile].data[n2]*area;
+            }
+            else {
+              field_out[m].data[n0] += (field_in[tile].data[n2]+field_in[tile].grad_x[n1]*di
+                                        +field_in[tile].grad_y[n1]*dj)*area;
+            }
+            out_area[n0] += area;
             out_miss[n0] = 1;
-    }
-  }
+          }
+        }
+      }
+      else {
+        for(n=0; n<interp[m].nxgrid; n++) {
+          i2   = interp[m].i_out[n];
+          j2   = interp[m].j_out[n];
+          i1   = interp[m].i_in [n];
+          j1   = interp[m].j_in [n];
+          di   = interp[m].di_in[n];
+          dj   = interp[m].dj_in[n];
+          tile = interp[m].t_in [n];
+          area = interp[m].area [n];
+
+          nx1  = grid_in[tile].nx;
+          ny1  = grid_in[tile].ny;
+          if(weight_exist) area *= grid_in[tile].weight[j1*nx1+i1];
+          for(k=0; k<nz; k++) {
+            n0 = k*nx2*ny2 + j2*nx2+i2;
+            n1 = k*nx1*ny1+j1*nx1+i1;
+            n2 = k*(nx1+2)*(ny1+2)+(j1+1)*(nx1+2)+i1+1;
+            if( cell_methods == CELL_METHODS_SUM )
+              area /= grid_in[tile].cell_area[n1];
+            else if( cell_measures )
+              area *= (field_in[tile].area[n1]/grid_in[tile].cell_area[n1]);
+            field_out[m].data[n0] += (field_in[tile].data[n2]+field_in[tile].grad_x[n1]*di
+                                      +field_in[tile].grad_y[n1]*dj)*area;
+            out_area[n0] += area;
+            out_miss[n0] = 1;
+          }
+        }
       }
     }
 
     if(opcode & CHECK_CONSERVE) {
       for(i=0; i<nx2*ny2*nz; i++) {
-  if(out_area[i] > 0) gsum_out += field_out[m].data[i];
+        if(out_area[i] > 0) gsum_out += field_out[m].data[i];
       }
     }
 
@@ -456,38 +456,38 @@ void do_scalar_conserve_interp(Interp_config *interp, int varid, int ntiles_in, 
     }
     else {
       for(i=0; i<nx2*ny2*nz; i++) {
-  if(out_area[i] > 0)
-    field_out[m].data[i] /= out_area[i];
-  else if(out_miss[i] == 1)
-    field_out[m].data[i] = 0.0;
-  else
-    field_out[m].data[i] = missing;
+        if(out_area[i] > 0)
+          field_out[m].data[i] /= out_area[i];
+        else if(out_miss[i] == 1)
+          field_out[m].data[i] = 0.0;
+        else
+          field_out[m].data[i] = missing;
       }
 
       if( (target_grid) ) {
-  for(i=0; i<nx2*ny2; i++) out_area[i] = 0.0;
-  for(n=0; n<interp[m].nxgrid; n++) {
-    i2   = interp[m].i_out[n];
-    j2   = interp[m].j_out[n];
-    i1   = interp[m].i_in [n];
-    j1   = interp[m].j_in [n];
-    tile = interp[m].t_in [n];
-    area = interp[m].area [n];
-    nx1  = grid_in[tile].nx;
-    ny1  = grid_in[tile].ny;
-    n0 = j2*nx2+i2;
-    n1 = j1*nx1+i1;
-    if(cell_measures )
-      out_area[n0] += (area*field_in[tile].area[n1]/grid_in[tile].cell_area[n1]);
-    else
-      out_area[n0] += area;
-  }
-  for(i=0; i<nx2*ny2*nz; i++) {
-    if(field_out[m].data[i] != missing) {
-      i2 = i%(nx2*ny2);
-      field_out[m].data[i] *=  (out_area[i2]/grid_out[m].cell_area[i2]);
-    }
-  }
+        for(i=0; i<nx2*ny2; i++) out_area[i] = 0.0;
+        for(n=0; n<interp[m].nxgrid; n++) {
+          i2   = interp[m].i_out[n];
+          j2   = interp[m].j_out[n];
+          i1   = interp[m].i_in [n];
+          j1   = interp[m].j_in [n];
+          tile = interp[m].t_in [n];
+          area = interp[m].area [n];
+          nx1  = grid_in[tile].nx;
+          ny1  = grid_in[tile].ny;
+          n0 = j2*nx2+i2;
+          n1 = j1*nx1+i1;
+          if(cell_measures )
+            out_area[n0] += (area*field_in[tile].area[n1]/grid_in[tile].cell_area[n1]);
+          else
+            out_area[n0] += area;
+        }
+        for(i=0; i<nx2*ny2*nz; i++) {
+          if(field_out[m].data[i] != missing) {
+            i2 = i%(nx2*ny2);
+            field_out[m].data[i] *=  (out_area[i2]/grid_out[m].cell_area[i2]);
+          }
+        }
       }
     }
 
@@ -508,21 +508,297 @@ void do_scalar_conserve_interp(Interp_config *interp, int varid, int ntiles_in, 
 
       if( cell_measures ) {
         for(j=0; j<ny1; j++) for(i=0; i<nx1; i++) {
-      dd = field_in[n].data[(j+halo)*(nx1+2*halo)+i+halo];
-    if(dd != missing) gsum_in += dd*field_in[n].area[j*nx1+i];
-        }
+            dd = field_in[n].data[(j+halo)*(nx1+2*halo)+i+halo];
+            if(dd != missing) gsum_in += dd*field_in[n].area[j*nx1+i];
+          }
       }
       else if ( cell_methods == CELL_METHODS_SUM ) {
         for(j=0; j<ny1; j++) for(i=0; i<nx1; i++) {
-    dd = field_in[n].data[(j+halo)*(nx1+2*halo)+i+halo];
-    if(dd != missing) gsum_in += dd;
-        }
+            dd = field_in[n].data[(j+halo)*(nx1+2*halo)+i+halo];
+            if(dd != missing) gsum_in += dd;
+          }
       }
       else {
         for(k=0; k<nz; k++) for(j=0; j<ny1; j++) for(i=0; i<nx1; i++) {
-    dd = field_in[n].data[k*(nx1+2*halo)*(ny1+2*halo)+(j+halo)*(nx1+2*halo)+i+halo];
-    if(dd != missing) gsum_in += dd*grid_in[n].cell_area[j*nx1+i];
+              dd = field_in[n].data[k*(nx1+2*halo)*(ny1+2*halo)+(j+halo)*(nx1+2*halo)+i+halo];
+              if(dd != missing) gsum_in += dd*grid_in[n].cell_area[j*nx1+i];
+            }
+      }
+    }
+    mpp_sum_double(1, &gsum_out);
+
+    if(mpp_pe() == mpp_root_pe()) printf("the flux(data*area) sum of %s: input = %g, output = %g, diff = %g. \n",
+                                         field_in->var[varid].name, gsum_in, gsum_out, gsum_out-gsum_in);
+
+  }
+
+
+}; /* do_scalar_conserve_interp */
+
+
+/*******************************************************************************
+ void do_scalar_conserve_interp( )
+ doing conservative interpolation
+*******************************************************************************/
+void do_scalar_conserve_order1_interp_acc(Interp_config *interp, int varid, int ntiles_in, const Grid_config *grid_in,
+                                          int ntiles_out, const Grid_config *grid_out, const Field_config *field_in,
+                                          Field_config *field_out, unsigned int opcode, int nz)
+{
+  int nx1, ny1, nx2, ny2, i1, j1, i2, j2, tile, n, m, i, j, n1, n2;
+  int k, n0;
+  int has_missing, halo, interp_method;
+  int weight_exist;
+  int cell_measures, cell_methods;
+  double area, missing, di, dj, area_missing;
+
+  double *out_area;
+  int *out_miss;
+  double gsum_out;
+  int target_grid;
+  int nxgrid;
+
+  Interp_config_mini *pinterp_mini;
+  Field_config *pfield_out, *pfield_in;
+  Grid_config *pgrid_in, *pgrid_out;
+
+  gsum_out = 0;
+  interp_method = field_in->var[varid].interp_method;
+  halo = 0;
+
+  area_missing  = field_in->var[varid].area_missing;
+  has_missing   = field_in->var[varid].has_missing;
+  weight_exist  = grid_in[0].weight_exist;
+  cell_measures = field_in->var[varid].cell_measures;
+  cell_methods  = field_in->var[varid].cell_methods;
+  target_grid   = opcode & TARGET;
+  if( field_in->var[varid].use_volume ) target_grid = 0;
+
+  missing = -MAXVAL;
+  if(has_missing) missing = field_in->var[varid].missing;
+  if( nz>1 && has_missing ) mpp_error("conserve_interp: has_missing should be false when nz > 1");
+  if( nz>1 && cell_measures ) mpp_error("conserve_interp: cell_measures should be false when nz > 1");
+  if( nz>1 && cell_methods == CELL_METHODS_SUM ) mpp_error("conserve_interp: cell_methods should not be sum when nz > 1");
+
+  for(m=0; m<ntiles_out; m++) {
+
+    nx2 = grid_out[m].nxc;
+    ny2 = grid_out[m].nyc;
+
+    out_area = (double *)malloc(nx2*ny2*nz*sizeof(double));
+    out_miss = (int *)malloc(nx2*ny2*nz*sizeof(int));
+    pfield_out = field_out+m;
+#pragma acc enter data create( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz]) \
+                       copyin( pfield_out[0:1], pfield_out->data[0:nx2*ny2*nz])
+#pragma acc parallel loop
+    for(i=0; i<nx2*ny2*nz; i++) {
+      pfield_out->data[i] = 0.0;
+      out_area[i] = 0.0;
+      out_miss[i] = 0;
+    }
+
+    if(has_missing) {
+
+      for( int itile=0 ; itile<ntiles_in ; itile++) {
+
+        pinterp_mini = interp[m].intile+itile;
+        pgrid_in = grid_in+itile;
+        pfield_in = field_in+itile;
+        nx1  = grid_in[itile].nx;
+        ny1  = grid_in[itile].ny;
+        nxgrid = pinterp_mini->nxgrid;
+
+#pragma acc data present( pinterp_mini[0:1], pinterp_mini->i_out[0:nxgrid], pinterp_mini->j_out[0:nxgrid], pinterp_mini->i_in[0:nxgrid], \
+                          pinterp_mini->j_in[0:nxgrid], pinterp_mini->area[0:nxgrid], out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], \
+                          pfield_out[0:1], pfield_out->data[0:nx2*ny2*nz] ) \
+                  copyin( pfield_in[0:1], pgrid_in[0:1], pfield_in->data[0:(nx1+2*halo)*(ny1+2*halo)*nz], \
+                          pfield_in->area[0:nx1*ny1], pgrid_in->cell_area[0:nx1*ny1], pgrid_in->weight[0:nx1*ny1] )
+#pragma acc parallel loop
+        for(n=0; n<pinterp_mini->nxgrid; n++) {
+
+          i2   = pinterp_mini->i_out[n];
+          j2   = pinterp_mini->j_out[n];
+          i1   = pinterp_mini->i_in[n];
+          j1   = pinterp_mini->j_in[n];
+          area = pinterp_mini->area [n];
+
+          if(weight_exist) area *= pgrid_in->weight[j1*nx1+i1];
+
+          n1 = j1*nx1+i1;
+          n0 = j2*nx2+i2;
+          if( pfield_in->data[n1] != missing ) {
+            if( cell_methods == CELL_METHODS_SUM )
+              area /= pgrid_in->cell_area[n1];
+            else if( cell_measures ) {
+              if(pfield_in->area[n1] == area_missing) {
+                printf("name=%s,tile=%d,i1,j1=%d,%d,i2,j2=%d,%d\n",field_in->var[varid].name,tile,i1,j1,i2,j2);
+              }
+              area *= (pfield_in->area[n1]/pgrid_in->cell_area[n1]);
+            }
+#pragma acc atomic update
+            pfield_out->data[n0]  += pfield_in->data[n1]*area;
+#pragma acc atomic update
+            out_area[n0] += area;
+            out_miss[n0] = 1;
+          } //if missing
+        } //nxgrid
+      }//itile
+    }//if
+    else {
+
+      for( int itile=0 ; itile<ntiles_in ; itile++) {
+
+        pinterp_mini = interp[m].intile+itile;
+        pfield_in = field_in+itile;
+        pgrid_in = grid_in+itile;
+        nx1  = grid_in[itile].nx;
+        ny1  = grid_in[itile].ny;
+        nxgrid = pinterp_mini->nxgrid;
+
+#pragma acc data present( pinterp_mini[0:1], pinterp_mini->i_out[0:nxgrid], pinterp_mini->j_out[0:nxgrid], pinterp_mini->i_in[0:nxgrid], \
+                          pinterp_mini->j_in[0:nxgrid], pinterp_mini->area[0:nxgrid], out_area[0:nx2*ny2*nz],\
+                          out_miss[0:nx2*ny2*nz], pfield_out[0:1], pfield_out->data[0:nx2*ny2*nz] ) \
+                  copyin( pfield_in[0:1], pfield_in->data[0:(nx1+2*halo)*(ny1+2*halo)*nz], pgrid_in->weight[0:nx1*ny1], \
+                          pfield_in->area[0:nx1*ny1], pgrid_in->cell_area[0:nx1*ny1])
+#pragma acc parallel loop
+        for(n=0; n<pinterp_mini->nxgrid; n++) {
+
+          i2   = pinterp_mini->i_out[n];
+          j2   = pinterp_mini->j_out[n];
+          i1   = pinterp_mini->i_in [n];
+          j1   = pinterp_mini->j_in [n];
+          area = pinterp_mini->area [n];
+
+          if(weight_exist) area *= pgrid_in->weight[j1*nx1+i1];
+#pragma acc loop seq
+          for(k=0; k<nz; k++) {
+            n0 = k*nx2*ny2 + j2*nx2+i2;
+            n1 = k*nx1*ny1+j1*nx1+i1;
+            if( cell_methods == CELL_METHODS_SUM )
+              area /= pgrid_in->cell_area[n1];
+            else if( cell_measures )
+              area *= (pfield_in->area[n1]/pgrid_in->cell_area[n1]);
+#pragma acc atomic update
+            pfield_out->data[n0] += pfield_in->data[n1]*area;
+#pragma acc atomic update
+            out_area[n0] += area;
+            out_miss[n0] = 1;
+          } //for kz
+        } // nxgrd
+      } //itile
+    } //if
+
+    if(opcode & CHECK_CONSERVE) {
+#pragma acc data present( pfield_out->data[0:nx2*ny2*nz], out_area[0:nx2*ny2*nz]) copy(gsum_out)
+#pragma acc parallel loop reduction(+:gsum_out)
+      for(i=0; i<nx2*ny2*nz; i++) {
+        if(out_area[i] > 0) gsum_out += pfield_out->data[i];
+      }
+    }
+
+    if ( cell_methods == CELL_METHODS_SUM ) {
+#pragma acc data present(out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], pfield_out->data[0:nx2*ny2*nz])
+#pragma acc parallel loop
+      for(i=0; i<nx2*ny2*nz; i++) {
+        if(out_area[i] == 0) {
+          if(out_miss[i] == 0)
+#pragma acc loop
+            for(k=0; k<nz; k++) pfield_out->data[k*nx2*ny2+i] = missing;
+          else
+#pragma acc loop
+            for(k=0; k<nz; k++) pfield_out->data[k*nx2*ny2+i] = 0.0;
         }
+      }
+    }
+    else {
+#pragma acc parallel loop present(out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz], pfield_out->data[0:nx2*ny2*nz])
+      for(i=0; i<nx2*ny2*nz; i++) {
+        if(out_area[i] > 0)
+          pfield_out->data[i] /= out_area[i];
+        else if(out_miss[i] == 1)
+          pfield_out->data[i] = 0.0;
+        else
+          pfield_out->data[i] = missing;
+      }
+
+      if( (target_grid) ) {
+#pragma acc parallel loop present(out_area[0:nx2*ny2*nz])
+        for(i=0; i<nx2*ny2; i++) out_area[i] = 0.0;
+
+        for( int itile=0 ; itile<ntiles_in ; itile++) {
+
+          nx1  = grid_in[itile].nx;
+          ny1  = grid_in[itile].ny;
+          pinterp_mini = interp[m].intile+itile;
+          pgrid_in = grid_in+itile;
+          pfield_in = field_in+itile;
+
+#pragma acc data present( pinterp_mini[0:1], pinterp_mini->i_in[0:nxgrid], pinterp_mini->j_in[0:nxgrid], pinterp_mini->i_out[0:nxgrid], \
+                          pinterp_mini->j_out[0:nxgrid], pinterp_mini->area[0:nxgrid], out_area[0:nx2*ny2*nz], \
+                          pfield_out->data[0:nx2*ny2*nz]) \
+                  copyin( pgrid_in[0:1], pfield_in[0:1], pgrid_in->cell_area[0:nx2*ny2], pfield_in->area[0:nx2*ny2])
+#pragma acc parallel loop private( i2, j2, i1, j1, n0, n1, area )
+          for(int n=0 ; n<pinterp_mini->nxgrid ; n++) {
+            i1 = pinterp_mini->i_in[n];
+            j1 = pinterp_mini->j_in[n];
+            i2 = pinterp_mini->i_out[n];
+            j2 = pinterp_mini->j_out[n];
+            area = pinterp_mini->area[n];
+            n0 = j2*nx2+i2;
+            n1 = j1*nx1+i1;
+            if(cell_measures )
+#pragma acc atomic update
+              out_area[n0] += (area*pfield_in->area[n1]/pgrid_in->cell_area[n1]);
+            else
+#pragma acc atomic update
+              out_area[n0] += area;
+          }
+        }
+
+        pgrid_out = grid_out+m ;
+#pragma acc data copyin( pgrid_out[0:1], pgrid_out->cell_area[0:nx2*ny2]) \
+                 present( out_area[0:nx2*ny2*nz], pfield_out->data[0:nx2*ny2*nz])
+#pragma acc parallel loop
+        for(i=0; i<nx2*ny2*nz; i++) {
+          if(pfield_out->data[i] != missing) {
+            i2 = i%(nx2*ny2);
+            pfield_out->data[i] *=  (out_area[i2]/pgrid_out->cell_area[i2]);
+          }
+        }
+      }
+    }
+
+    free(out_area); free(out_miss);
+#pragma acc exit data delete( out_area[0:nx2*ny2*nz], out_miss[0:nx2*ny2*nz] )
+#pragma acc exit data copyout(pfield_out->data[0:nx2*ny2*nz])
+
+  } //m
+
+  /* conservation check if needed */
+  if(opcode & CHECK_CONSERVE) {
+    double gsum_in, dd;
+    gsum_in = 0;
+    for(n=0; n<ntiles_in; n++) {
+
+      nx1  = grid_in[n].nx;
+      ny1  = grid_in[n].ny;
+
+      if( cell_measures ) {
+        for(j=0; j<ny1; j++) for(i=0; i<nx1; i++) {
+            dd = field_in[n].data[(j+halo)*(nx1+2*halo)+i+halo];
+            if(dd != missing) gsum_in += dd*field_in[n].area[j*nx1+i];
+          }
+      }
+      else if ( cell_methods == CELL_METHODS_SUM ) {
+        for(j=0; j<ny1; j++) for(i=0; i<nx1; i++) {
+            dd = field_in[n].data[(j+halo)*(nx1+2*halo)+i+halo];
+            if(dd != missing) gsum_in += dd;
+          }
+      }
+      else {
+        for(k=0; k<nz; k++) for(j=0; j<ny1; j++) for(i=0; i<nx1; i++) {
+              dd = field_in[n].data[k*(nx1+2*halo)*(ny1+2*halo)+(j+halo)*(nx1+2*halo)+i+halo];
+              if(dd != missing) gsum_in += dd*grid_in[n].cell_area[j*nx1+i];
+            }
       }
     }
     mpp_sum_double(1, &gsum_out);
@@ -532,9 +808,7 @@ void do_scalar_conserve_interp(Interp_config *interp, int varid, int ntiles_in, 
 
   }
 
-
-}; /* do_scalar_conserve_interp */
-
+}; /* do_scalar_conserve_order1_interp */
 
 
 
@@ -542,9 +816,9 @@ void do_scalar_conserve_interp(Interp_config *interp, int varid, int ntiles_in, 
  void do_scalar_conserve_interp( )
  doing conservative interpolation
 *******************************************************************************/
-void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntiles_in, const Grid_config *grid_in,
-                                      int ntiles_out, const Grid_config *grid_out, const Field_config *field_in,
-                                      Field_config *field_out, unsigned int opcode, int nz)
+void do_scalar_conserve_order2_interp_acc(Interp_config *interp, int varid, int ntiles_in, const Grid_config *grid_in,
+                                          int ntiles_out, const Grid_config *grid_out, const Field_config *field_in,
+                                          Field_config *field_out, unsigned int opcode, int nz)
 {
   int nx1, ny1, nx2, ny2, i1, j1, i2, j2, tile, n, m, i, j, n1, n2;
   int k, n0;
@@ -826,9 +1100,6 @@ void do_scalar_conserve_order2_interp(Interp_config *interp, int varid, int ntil
 }; /* do_scalar_conserve_order2_interp */
 
 
-
-
-
 /*******************************************************************************
  void do_vector_conserve_interp( )
  doing conservative interpolation
@@ -984,9 +1255,9 @@ void do_create_xgrid_order1( const int n, const int m,
 
 }
 
-void do_create_xgrid_order2_acc( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
-                                 Minmaxavg_lists *out_minmaxavg, Interp_config_mini *interp_mini,
-                                 size_t *nxgrid, unsigned int opcode, int debug )
+void do_create_xgrid_order_acc( const int n, const int m, const Grid_config *grid_in, const Grid_config *grid_out,
+                                Minmaxavg_lists *out_minmaxavg, Interp_config_mini *interp_mini,
+                                size_t *nxgrid, unsigned int opcode, int debug )
 {
 
   double *mask;
@@ -1008,9 +1279,6 @@ void do_create_xgrid_order2_acc( const int n, const int m, const Grid_config *gr
   nx_in = grid_in[m].nx;
   ny_in = grid_in[m].ny;
 
-  cell_in.area = (double *)malloc(nx_in*ny_in*sizeof(double));
-  cell_in.clon = (double *)malloc(nx_in*ny_in*sizeof(double));
-  cell_in.clat = (double *)malloc(nx_in*ny_in*sizeof(double));
   mask           = (double *)malloc(nx_in*ny_in*sizeof(double));
   counts_per_ij1 = (int *)malloc(nx_in*ny_in*sizeof(int));
   ij2_start      = (int *)malloc(nx_in*ny_in*sizeof(int));
@@ -1019,8 +1287,6 @@ void do_create_xgrid_order2_acc( const int n, const int m, const Grid_config *gr
 #pragma acc enter data copyin(grid_in[m].latc[0:(nx_in+1)*(ny_in+1)],\
                               grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)], \
                               grid_in[m].cell_area[0:nx_in*ny_in],      \
-                              cell_in, cell_in.area[0:nx_in*ny_in],    \
-                              cell_in.clon[0:nx_in*ny_in], cell_in.clat[0:nx_in*ny_in], \
                               mask[0:nx_in*ny_in], counts_per_ij1[0:nx_in*ny_in], \
                               ij2_start[0:nx_in*ny_in], ij2_end[0:nx_in*ny_in])
 
@@ -1030,40 +1296,57 @@ void do_create_xgrid_order2_acc( const int n, const int m, const Grid_config *gr
   get_jstart_jend(nx_out, ny_out, nx_in, ny_in, grid_out[n].latc, grid_in[m].latc, &jstart, &jend, &ny_now);
 
   if(debug) time_start = clock();
-  approx_nxgrid = prepare_create_xgrid_2dx2d_order2_acc(nx_in, ny_now, nx_out, ny_out, grid_in[m].lonc+jstart*(nx_in+1),
-                                                        grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc,
-                                                        out_minmaxavg, mask, counts_per_ij1, ij2_start, ij2_end );
+  approx_nxgrid = prepare_create_xgrid_2dx2d_acc(nx_in, ny_now, nx_out, ny_out, grid_in[m].lonc+jstart*(nx_in+1),
+                                                 grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc,
+                                                 out_minmaxavg, mask, counts_per_ij1, ij2_start, ij2_end );
   if(debug) {
     time_end = clock();
     total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
     printf("APPROX_NXGRID=%d  tile_n=%d  tile_m=%d  time_taken=%f\n", approx_nxgrid, n, m, total_time);
   }
 
-  if(debug) time_start = clock();
-  inxgrid = create_xgrid_2dx2d_order2_acc(nx_in, ny_now, nx_out, ny_out, grid_in[m].lonc+jstart*(nx_in+1),
-                                          grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc, out_minmaxavg, mask,
-                                          approx_nxgrid, counts_per_ij1, ij2_start, ij2_end, interp_mini, &cell_in, jstart, m);
-  *nxgrid += inxgrid;
 
+  if(debug) time_start = clock();
+  if(opcode & CONSERVE_ORDER1)
+    inxgrid = create_xgrid_2dx2d_order1_acc(nx_in, ny_now, nx_out, ny_out, grid_in[m].lonc+jstart*(nx_in+1),
+                                            grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc, out_minmaxavg, mask,
+                                            approx_nxgrid, counts_per_ij1, ij2_start, ij2_end, interp_mini, jstart, m);
+  else if(opcode & CONSERVE_ORDER2) {
+    cell_in.area = (double *)malloc(nx_in*ny_in*sizeof(double));
+    cell_in.clon = (double *)malloc(nx_in*ny_in*sizeof(double));
+    cell_in.clat = (double *)malloc(nx_in*ny_in*sizeof(double));
+#pragma acc enter data copyin(cell_in, cell_in.area[0:nx_in*ny_in], \
+                              cell_in.clon[0:nx_in*ny_in], cell_in.clat[0:nx_in*ny_in] )
+    inxgrid = create_xgrid_2dx2d_order2_acc(nx_in, ny_now, nx_out, ny_out, grid_in[m].lonc+jstart*(nx_in+1),
+                                            grid_in[m].latc+jstart*(nx_in+1), grid_out[n].lonc, grid_out[n].latc, out_minmaxavg, mask,
+                                            approx_nxgrid, counts_per_ij1, ij2_start, ij2_end, interp_mini, &cell_in, jstart, m);
+  }
+  else
+    mpp_error("conserve_interp: interp_method should be CONSERVE_ORDER1 or CONSERVE_ORDER2");
   if(debug) {
     time_end = clock();
     total_time = (double)(time_end - time_start)/CLOCKS_PER_SEC;
     printf("       NXGRID=%d  tile_n=%d  tile_m=%d  time_taken=%f\n\n", inxgrid, n, m, total_time);
   }
 
-  if( inxgrid>0 ) {
+
+  *nxgrid += inxgrid;
+
+
+  if(opcode & CONSERVE_ORDER2 && inxgrid>0) {
     get_interp_dij_acc(m, nx_in, ny_in, grid_in[m].cell_area, grid_in[m].latc, grid_in[m].lonc, &cell_in, interp_mini);
+#pragma acc exit data delete(cell_in.area[0:nx_in*ny_in], cell_in.clon[0:nx_in*ny_in], \
+                             cell_in.clat[0:nx_in*ny_in], cell_in)
+    free(cell_in.area) ; free(cell_in.clon) ; free(cell_in.clat);
   }
+
 
 #pragma acc exit data delete(grid_in[m].latc[0:(nx_in+1)*(ny_in+1)], \
                              grid_in[m].lonc[0:(nx_in+1)*(ny_in+1)],    \
                              grid_in[m].cell_area[0:nx_in*ny_in],       \
-                             cell_in.area[0:nx_in*ny_in], cell_in.clon[0:nx_in*ny_in], \
-                             cell_in.clat[0:nx_in*ny_in],               \
-                             mask[0:nx_in*ny_in], counts_per_ij1[0:nx_in*ny_in],\
+                             mask[0:nx_in*ny_in], counts_per_ij1[0:nx_in*ny_in], \
                              ij2_start[0:nx_in*ny_in], ij2_end[0:nx_in*ny_in])
   free(mask); free(counts_per_ij1); free(ij2_start) ; free(ij2_end) ;
-  free(cell_in.area) ; free(cell_in.clon) ; free(cell_in.clat);
 
 }
 

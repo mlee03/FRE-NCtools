@@ -104,8 +104,10 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
         pinterp->intile[m].i_out = (int *)malloc(nxgrid_acc*sizeof(int));
         pinterp->intile[m].j_out = (int *)malloc(nxgrid_acc*sizeof(int));
         pinterp->intile[m].area  = (double *)malloc(nxgrid_acc*sizeof(double));
-        pinterp->intile[m].di_in = (double *)malloc(nxgrid_acc*sizeof(double));
-        pinterp->intile[m].dj_in = (double *)malloc(nxgrid_acc*sizeof(double));
+        if( opcode & CONSERVE_ORDER2) {
+          pinterp->intile[m].di_in = (double *)malloc(nxgrid_acc*sizeof(double));
+          pinterp->intile[m].dj_in = (double *)malloc(nxgrid_acc*sizeof(double));
+        }
       }
 
       ind_acc = (int *)calloc(ntiles_in, sizeof(int));
@@ -126,18 +128,20 @@ void read_remap_file( int ntiles_in, int ntiles_out, Grid_config *grid_out,
         ind_acc[ii]++;
       }
 
-#pragma acc enter data copyin( pinterp )
+#pragma acc enter data copyin( pinterp[0:1] )
       for( int m=0 ; m < ntiles_in ; m++ ) {
         nxgrid_acc = pinterp->intile[m].nxgrid ;
         pinterp_mini = pinterp->intile+m;
-#pragma acc enter data copyin( pinterp_mini )
+#pragma acc enter data copyin( pinterp_mini[0:1] )
 #pragma acc enter data copyin( pinterp_mini->i_in[0:nxgrid_acc] )
 #pragma acc enter data copyin( pinterp_mini->j_in[0:nxgrid_acc] )
 #pragma acc enter data copyin( pinterp_mini->i_out[0:nxgrid_acc] )
 #pragma acc enter data copyin( pinterp_mini->j_out[0:nxgrid_acc] )
 #pragma acc enter data copyin( pinterp_mini->area[0:nxgrid_acc] )
+        if( opcode & CONSERVE_ORDER2) {
 #pragma acc enter data copyin( pinterp_mini->di_in[0:nxgrid_acc] )
 #pragma acc enter data copyin( pinterp_mini->dj_in[0:nxgrid_acc] )
+        }
       }
 
 

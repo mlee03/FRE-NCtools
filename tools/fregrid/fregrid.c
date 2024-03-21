@@ -1069,20 +1069,18 @@ int main(int argc, char* argv[])
              if( opcode & BILINEAR )
                do_scalar_bilinear_interp(interp, l, ntiles_in, grid_in, grid_out, scalar_in, scalar_out, finer_step, fill_missing);
              else {
-               if( opcode & CONSERVE_ORDER2) {
-                 if (opcode & MONOTONIC)
-                   do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-                 else{
 #ifdef _OPENACC
-                   time_start_scalar=clock();
-                   do_scalar_conserve_order2_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-#else
-                   do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
-#endif
-                 }
+               if( opcode & CONSERVE_ORDER2) {
+                 time_start_scalar=clock();
+                 do_scalar_conserve_order2_interp_acc(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
                }
-               else
-                 do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+               if( opcode & CONSERVE_ORDER1) {
+                 time_start_scalar=clock();
+                 do_scalar_conserve_order1_interp_acc(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+               }
+#else
+               do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+#endif
              }
              if(debug) {
                time_end = clock();
