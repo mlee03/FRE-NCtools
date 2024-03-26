@@ -31,6 +31,7 @@ SUBDIRS = postprocessing/combine_restarts \
           tools/check_mask \
           tools/cubic_utils \
           tools/fregrid \
+          tools/fregrid_acc \
           tools/make_coupler_mosaic \
           tools/make_hgrid \
           tools/make_land_domain \

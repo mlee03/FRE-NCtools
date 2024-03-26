@@ -190,6 +190,7 @@ AC_CONFIG_FILES([Makefile
                  tools/check_mask/Makefile
                  tools/cubic_utils/Makefile
                  tools/fregrid/Makefile
+                 tools/fregrid_acc/Makefile
                  tools/make_coupler_mosaic/Makefile
                  tools/make_hgrid/Makefile
                  tools/make_land_domain/Makefile
