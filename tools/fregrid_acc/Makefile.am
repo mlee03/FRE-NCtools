@@ -19,17 +19,17 @@
 #***********************************************************************
 bin_PROGRAMS = fregrid_acc
 
-AM_CFLAGS = -I$(top_srcdir)/tools/libfrencutils \
-            $(NETCDF_CFLAGS)
+AM_CFLAGS = -I$(top_srcdir)/tools/libfrencutils $(NETCDF_CFLAGS)
 LDADD = $(NETCDF_LDFLAGS) $(NETCDF_LIBS) $(RPATH_FLAGS)
 
-fregrid_acc_SOURCES = bilinear_interp.c \
-                  bilinear_interp.h \
-                  conserve_interp.c \
-                  conserve_interp.h \
-                  fregrid_util.c \
-                  fregrid_util.h \
-                  fregrid.c \
-                  globals.h
+fregrid_acc_SOURCES = bilinear_interp_acc.c \
+                      bilinear_interp_acc.h \
+                      conserve_interp_acc.c \
+                      conserve_interp_acc.h \
+                      conserve_interp_util_acc.c \
+                      conserve_interp_util_acc.h \
+                      fregrid_util_acc.c \
+                      fregrid_util_acc.h \
+                      fregrid_acc.c
 fregrid_acc_LDADD = $(top_builddir)/tools/libfrencutils/libfrencutils.a $(LDADD)
 fregrid_acc_CFLAGS = $(AM_CFLAGS)

@@ -22,7 +22,7 @@
 #include <math.h>
 #include "globals.h"
 #include "mosaic_util.h"
-#include "bilinear_interp.h"
+#include "bilinear_interp_acc.h"
 #include "mpp_io.h"
 #include "mpp.h"
 

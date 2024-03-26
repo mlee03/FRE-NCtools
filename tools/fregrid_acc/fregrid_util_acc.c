@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
-#include "fregrid_util.h"
+#include "fregrid_util_acc.h"
 #include "mpp.h"
 #include "mpp_io.h"
 #include "tool_util.h"

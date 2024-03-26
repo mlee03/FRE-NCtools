@@ -51,9 +51,9 @@
 #include "mpp_io.h"
 #include "mpp.h"
 #include "mosaic_util.h"
-#include "conserve_interp.h"
-#include "bilinear_interp.h"
-#include "fregrid_util.h"
+#include "conserve_interp_acc.h"
+#include "bilinear_interp_acc.h"
+#include "fregrid_util_acc.h"
 
 char *usage[] = {
   "",
@@ -470,11 +470,11 @@ int main(int argc, char* argv[])
       break;
     case 'm':
       if(strcmp(optarg, "AGRID") == 0)
-	grid_type = AGRID;
+        grid_type = AGRID;
       else if(strcmp(optarg, "BGRID") == 0)
-	grid_type = BGRID;
+        grid_type = BGRID;
       else
-	mpp_error("fregrid: only AGRID and BGRID vector regridding are implmented, contact developer");
+        mpp_error("fregrid: only AGRID and BGRID vector regridding are implmented, contact developer");
       break;
     case 'n':
       opcode |= TARGET;
@@ -554,7 +554,7 @@ int main(int argc, char* argv[])
       break;
     case 'T':
       shuffle = atoi(optarg);
-	break;
+      break;
     case 'U':
       format = optarg;
       break;
@@ -674,17 +674,6 @@ int main(int argc, char* argv[])
       strcat(history, argv[i]);
   }
 
-{
-  int base_cpu;
-
-#if defined(_OPENMP)
-  omp_set_num_threads(nthreads);
-  base_cpu = get_cpu_affinity();
-#pragma omp parallel
-  set_cpu_affinity(base_cpu+omp_get_thread_num() );
-#endif
-
-}
 
   /* get the mosaic information of input and output mosaic*/
   fid = mpp_open(mosaic_in, MPP_READ);
@@ -730,6 +719,9 @@ int main(int argc, char* argv[])
   grid_out  = (Grid_config *)malloc(ntiles_out*sizeof(Grid_config));
   bound_T   = (Bound_config *)malloc(ntiles_in *sizeof(Bound_config));
   interp    = (Interp_config *)malloc(ntiles_out*sizeof(Interp_config));
+  for(int n=0 ; n<ntiles_out ; n++) {
+    interp[n].interp_mini = (Interp_config_mini *)malloc(ntiles_in*sizeof(Interp_config_mini));
+  }
 
   if(debug) {
     print_mem_usage("Before calling get_input_grid");
@@ -779,10 +771,10 @@ int main(int argc, char* argv[])
       ind1 = j*(grid_in[0].nx+2)+1;
       ind2 = 1*(grid_in[0].nx+2)+i;
       if(fabs( grid_in[0].lont[ind0]-grid_in[0].lont[ind2] ) > EPSLN10 ||
-	 fabs( grid_in[0].latt[ind0]-grid_in[0].latt[ind1] ) > EPSLN10 )
-	mpp_error("fregrid: extrapolate is limited to lat-lon grid");
+         fabs( grid_in[0].latt[ind0]-grid_in[0].latt[ind1] ) > EPSLN10 )
+        mpp_error("fregrid: extrapolate is limited to lat-lon grid");
 
-    }
+      }
   }
 
   /* when vertical_interp is set, extrapolate must be set */
@@ -844,7 +836,7 @@ int main(int argc, char* argv[])
       }
       else {
         strcpy(scalar_name_remap[nscalar], scalar_name[n]);
-          nscalar++;
+        nscalar++;
       }
     }
 
@@ -861,11 +853,11 @@ int main(int argc, char* argv[])
     }
     if(nvector > 0) {
       if ((opcode & CONSERVE_ORDER1) || (opcode & CONSERVE_ORDER2  )){
-          mpp_error("fregrid: conservative interpolation of vector fields is not supported. \n"
-          "Use bilinear interpolation or regrid the vector components independently as scalars.\n");
+        mpp_error("fregrid: conservative interpolation of vector fields is not supported. \n"
+                  "Use bilinear interpolation or regrid the vector components independently as scalars.\n");
       }
       else if (!(opcode & BILINEAR)){
-          mpp_error("fregrid: For vector fields, the interpolation method must be bilinear interpolation.\n");
+        mpp_error("fregrid: For vector fields, the interpolation method must be bilinear interpolation.\n");
       }
       else{
         u_in = (Field_config *)malloc(ntiles_in * sizeof(Field_config));
@@ -889,7 +881,7 @@ int main(int argc, char* argv[])
     }
 
     get_input_metadata(ntiles_in, nfiles, file_in, file2_in, scalar_in, u_in, v_in, grid_in,
-		       kbegin, kend, lbegin, lend, opcode, associated_file_dir);
+                       kbegin, kend, lbegin, lend, opcode, associated_file_dir);
 
     set_weight_inf( ntiles_in, grid_in, weight_file, weight_field, file_in->has_cell_measure_att);
 
@@ -904,34 +896,34 @@ int main(int argc, char* argv[])
     }
 
     set_output_metadata(ntiles_in, nfiles, file_in, file2_in, scalar_in, u_in, v_in,
-			ntiles_out, file_out, file2_out, scalar_out, u_out, v_out, grid_out, &vgrid_out, history, tagname, opcode,
-			deflation, shuffle);
+                        ntiles_out, file_out, file2_out, scalar_out, u_out, v_out, grid_out, &vgrid_out, history, tagname, opcode,
+                        deflation, shuffle);
 
     if(debug) print_mem_usage("After set_output_metadata");
     /* when the interp_method specified through command line is CONSERVE_ORDER1, but the interp_method in the source file
        field attribute is CONSERVE_ORDER2, need to modify the interp_method value */
     if(opcode & CONSERVE_ORDER1) {
       for(l=0; l<nscalar; l++) {
-	if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
-	  if(mpp_pe() == mpp_root_pe())printf("NOTE from fregrid: even though the interp_method specified through command line is "
-					      "conserve_order1, the interp_method is reset to conserve_order2 because some fields in "
-					      "the source data have interp_method attribute value conserve_order2");
-	  opcode = opcode & ~CONSERVE_ORDER1;
-	  opcode |= CONSERVE_ORDER2;
-	  break;
-	}
+        if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
+          if(mpp_pe() == mpp_root_pe())printf("NOTE from fregrid: even though the interp_method specified through command line is "
+                                              "conserve_order1, the interp_method is reset to conserve_order2 because some fields in "
+                                              "the source data have interp_method attribute value conserve_order2");
+          opcode = opcode & ~CONSERVE_ORDER1;
+          opcode |= CONSERVE_ORDER2;
+          break;
+        }
       }
     }
     if(opcode & CONSERVE_ORDER1) {
       for(l=0; l<nvector; l++) {
-	if(u_out->var[l].interp_method == CONSERVE_ORDER2) {
-	  if(mpp_pe() == mpp_root_pe())printf("NOTE from fregrid: even though the interp_method specified through command line is "
-					      "conserve_order1, the interp_method is reset to conserve_order2 because some fields in "
-					      "the source data have interp_method attribute value conserve_order2");
-	  opcode = opcode & ~CONSERVE_ORDER1;
-	  opcode |= CONSERVE_ORDER2;
-	  break;
-	}
+        if(u_out->var[l].interp_method == CONSERVE_ORDER2) {
+          if(mpp_pe() == mpp_root_pe())printf("NOTE from fregrid: even though the interp_method specified through command line is "
+                                              "conserve_order1, the interp_method is reset to conserve_order2 because some fields in "
+                                              "the source data have interp_method attribute value conserve_order2");
+          opcode = opcode & ~CONSERVE_ORDER1;
+          opcode |= CONSERVE_ORDER2;
+          break;
+        }
       }
     }
   }
@@ -964,50 +956,50 @@ int main(int argc, char* argv[])
 
     setup_bilinear_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode, dlon_in, dlat_in, lonbegin_in, latbegin_in );
   }
-   else
-     setup_conserve_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode);
-   if(debug) {
-     time_end = clock();
-     time_setup_interp = 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
-     print_mem_usage("After setup interp");
-   }
-   if(debug) {
-      print_time("get_input_grid", time_get_in_grid);
-      print_time("get_output_grid", time_get_out_grid);
-      print_time("setup_interp", time_setup_interp);
-   }
-   if(save_weight_only) {
-     if(mpp_pe() == mpp_root_pe() ) {
-       printf("NOTE: Successfully running fregrid and the following files which store weight information are generated.\n");
-       for(n=0; n<ntiles_out; n++) {
-	 printf("****%s\n", interp[n].remap_file);
-       }
-     }
-     mpp_end();
-     return 0;
-   }
+  else
+    setup_conserve_interp(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode);
+  if(debug) {
+    time_end = clock();
+    time_setup_interp = 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
+    print_mem_usage("After setup interp");
+  }
+  if(debug) {
+    print_time("get_input_grid", time_get_in_grid);
+    print_time("get_output_grid", time_get_out_grid);
+    print_time("setup_interp", time_setup_interp);
+  }
+  if(save_weight_only) {
+    if(mpp_pe() == mpp_root_pe() ) {
+      printf("NOTE: Successfully running fregrid and the following files which store weight information are generated.\n");
+      for(n=0; n<ntiles_out; n++) {
+        printf("****%s\n", interp[n].remap_file);
+      }
+    }
+    mpp_end();
+    return 0;
+  }
 
-   if(nscalar > 0) {
-     get_field_attribute(ntiles_in, scalar_in);
-     copy_field_attribute(ntiles_out, scalar_in, scalar_out);
-   }
+  if(nscalar > 0) {
+    get_field_attribute(ntiles_in, scalar_in);
+    copy_field_attribute(ntiles_out, scalar_in, scalar_out);
+  }
 
-   if(nvector > 0) {
-     get_field_attribute(ntiles_in, u_in);
-     get_field_attribute(ntiles_in, v_in);
-     copy_field_attribute(ntiles_out, u_in, u_out);
-     copy_field_attribute(ntiles_out, v_in, v_out);
-   }
+  if(nvector > 0) {
+    get_field_attribute(ntiles_in, u_in);
+    get_field_attribute(ntiles_in, v_in);
+    copy_field_attribute(ntiles_out, u_in, u_out);
+    copy_field_attribute(ntiles_out, v_in, v_out);
+  }
 
 
 
-   /* set time step to 1, only test scalar field now, nz need to be 1 */
-   if(test_case) {
-     if(nscalar != 1 || nvector != 0) mpp_error("fregrid: when test_case is specified, nscalar must be 1 and nvector must be 0");
-     if(scalar_in->var->nz != 1) mpp_error("fregrid: when test_case is specified, number of vertical level must be 1");
-     file_in->nt = 1;
-     file_out->nt = 1;
-   }
+  /* set time step to 1, only test scalar field now, nz need to be 1 */
+  if(test_case) {
+    if(nscalar != 1 || nvector != 0) mpp_error("fregrid: when test_case is specified, nscalar must be 1 and nvector must be 0");
+    if(scalar_in->var->nz != 1) mpp_error("fregrid: when test_case is specified, number of vertical level must be 1");
+    file_in->nt = 1;
+    file_out->nt = 1;
+  }
 
   /* Then doing the regridding */
   for(m=0; m<file_in->nt; m++) {
@@ -1023,68 +1015,68 @@ int main(int argc, char* argv[])
       level_t = m + scalar_in->var[l].lstart;
       /*--- to reduce memory usage, we are only do remapping for on horizontal level one time */
       for(level_n =0; level_n < scalar_in->var[l].nn; level_n++) {
-	if(extrapolate) {
-	  get_input_data(ntiles_in, scalar_in, grid_in, bound_T, l, -1, level_n, level_t, extrapolate, stop_crit);
-	  allocate_field_data(ntiles_out, scalar_out, grid_out, scalar_in->var[l].nz);
-	  if( opcode & BILINEAR )
-	    do_scalar_bilinear_interp(interp, l, ntiles_in, grid_in, grid_out, scalar_in, scalar_out, finer_step, fill_missing);
-	  else
-	    do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode, scalar_in->var[l].nz);
+        if(extrapolate) {
+          get_input_data(ntiles_in, scalar_in, grid_in, bound_T, l, -1, level_n, level_t, extrapolate, stop_crit);
+          allocate_field_data(ntiles_out, scalar_out, grid_out, scalar_in->var[l].nz);
+          if( opcode & BILINEAR )
+            do_scalar_bilinear_interp(interp, l, ntiles_in, grid_in, grid_out, scalar_in, scalar_out, finer_step, fill_missing);
+          else
+            do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode, scalar_in->var[l].nz);
           if(vertical_interp) do_vertical_interp(&vgrid_in, &vgrid_out, grid_out, scalar_out, l);
-	  write_field_data(ntiles_out, scalar_out, grid_out, l, -1, level_n, m);
-	  if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
-	    for(n=0; n<ntiles_in; n++) {
-	      free(scalar_in[n].grad_x);
-	      free(scalar_in[n].grad_y);
-	    }
-	  }
-	  for(n=0; n<ntiles_in; n++) free(scalar_in[n].data);
-	  for(n=0; n<ntiles_out; n++) free(scalar_out[n].data);
-	}
-	else {
-	  for(level_z=scalar_in->var[l].kstart; level_z <= scalar_in->var[l].kend; level_z++)
-	    {
+          write_field_data(ntiles_out, scalar_out, grid_out, l, -1, level_n, m);
+          if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
+            for(n=0; n<ntiles_in; n++) {
+              free(scalar_in[n].grad_x);
+              free(scalar_in[n].grad_y);
+            }
+          }
+          for(n=0; n<ntiles_in; n++) free(scalar_in[n].data);
+          for(n=0; n<ntiles_out; n++) free(scalar_out[n].data);
+        }
+        else {
+          for(level_z=scalar_in->var[l].kstart; level_z <= scalar_in->var[l].kend; level_z++)
+            {
               if(debug) time_start = clock();
               if(test_case)
-		get_test_input_data(test_case, test_param, ntiles_in, scalar_in, grid_in, bound_T, opcode);
-	      else
-		get_input_data(ntiles_in, scalar_in, grid_in, bound_T, l, level_z, level_n, level_t, extrapolate, stop_crit);
+                get_test_input_data(test_case, test_param, ntiles_in, scalar_in, grid_in, bound_T, opcode);
+              else
+                get_input_data(ntiles_in, scalar_in, grid_in, bound_T, l, level_z, level_n, level_t, extrapolate, stop_crit);
               if(debug) {
-	        time_end = clock();
-		time_get_input += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
-	      }
+                time_end = clock();
+                time_get_input += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
+              }
 
-	      allocate_field_data(ntiles_out, scalar_out, grid_out, 1);
-	      if(debug) time_start = clock();
-	      if( opcode & BILINEAR )
-		do_scalar_bilinear_interp(interp, l, ntiles_in, grid_in, grid_out, scalar_in, scalar_out, finer_step, fill_missing);
-	      else
-		do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
+              allocate_field_data(ntiles_out, scalar_out, grid_out, 1);
+              if(debug) time_start = clock();
+              if( opcode & BILINEAR )
+                do_scalar_bilinear_interp(interp, l, ntiles_in, grid_in, grid_out, scalar_in, scalar_out, finer_step, fill_missing);
+              else
+                do_scalar_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in, scalar_out, opcode,1);
               if(debug) {
-		time_end = clock();
-		time_do_interp += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
-	      }
+                time_end = clock();
+                time_do_interp += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
+              }
 
-	      if(debug) time_start = clock();
-	      write_field_data(ntiles_out, scalar_out, grid_out, l, level_z, level_n, m);
-	      if(debug) {
-		time_end = clock();
-	        time_write += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
-	      }
-	      if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
-		for(n=0; n<ntiles_in; n++) {
-		  free(scalar_in[n].grad_x);
-		  free(scalar_in[n].grad_y);
-		  free(scalar_in[n].grad_mask);
-		}
-	      }
-	      for(n=0; n<ntiles_in; n++) free(scalar_in[n].data);
-	      for(n=0; n<ntiles_out; n++) free(scalar_out[n].data);
-	    }
-	}
+              if(debug) time_start = clock();
+              write_field_data(ntiles_out, scalar_out, grid_out, l, level_z, level_n, m);
+              if(debug) {
+                time_end = clock();
+                time_write += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;
+              }
+              if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
+                for(n=0; n<ntiles_in; n++) {
+                  free(scalar_in[n].grad_x);
+                  free(scalar_in[n].grad_y);
+                  free(scalar_in[n].grad_mask);
+                }
+              }
+              for(n=0; n<ntiles_in; n++) free(scalar_in[n].data);
+              for(n=0; n<ntiles_out; n++) free(scalar_out[n].data);
+            }
+        }
       }
     }
-   if(debug) print_mem_usage("After do interp");
+    if(debug) print_mem_usage("After do interp");
     /* then interp vector field */
     for(l=0; l<nvector; l++) {
       if( !u_in[n].var[l].has_taxis && m>0) continue;
@@ -1094,19 +1086,19 @@ int main(int argc, char* argv[])
       allocate_field_data(ntiles_out, u_out, grid_out, u_in[n].var[l].nz);
       allocate_field_data(ntiles_out, v_out, grid_out, u_in[n].var[l].nz);
       if( opcode & BILINEAR )
-	do_vector_bilinear_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, u_in, v_in, u_out, v_out, finer_step, fill_missing);
+        do_vector_bilinear_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, u_in, v_in, u_out, v_out, finer_step, fill_missing);
       else
-	do_vector_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, u_in, v_in, u_out, v_out, opcode);
+        do_vector_conserve_interp(interp, l, ntiles_in, grid_in, ntiles_out, grid_out, u_in, v_in, u_out, v_out, opcode);
 
       write_field_data(ntiles_out, u_out, grid_out, l, level_z, level_n, m);
       write_field_data(ntiles_out, v_out, grid_out, l, level_z, level_n, m);
       for(n=0; n<ntiles_in; n++) {
-	free(u_in[n].data);
-	free(v_in[n].data);
+        free(u_in[n].data);
+        free(v_in[n].data);
       }
       for(n=0; n<ntiles_out; n++) {
-	free(u_out[n].data);
-	free(v_out[n].data);
+        free(u_out[n].data);
+        free(v_out[n].data);
       }
     }
   }
@@ -1123,8 +1115,8 @@ int main(int argc, char* argv[])
       mpp_close(file_out[n].fid);
       printf("****%s\n", file_out[n].name);
       if( nfiles > 1 ) {
-	mpp_close(file2_out[n].fid);
-	printf("****%s\n", file2_out[n].name);
+        mpp_close(file2_out[n].fid);
+        printf("****%s\n", file2_out[n].name);
       }
     }
   }
@@ -1133,7 +1125,3 @@ int main(int argc, char* argv[])
   return 0;
 
 } /* end of main */
-
-
-
-
