@@ -60,8 +60,8 @@ void free_upbound_nxcells_array_from_all_acc( const int n, int *approx_nxcells_p
 
 void free_output_grid_cell_struct_from_all_acc(const int n, Grid_cells_struct_config *grid_cells);
 
-void copy_data_to_xgrid_on_device_acc(const int nxcells, const int input_ncells, const int upbound_nxcells,
-                                      int *xcells_per_ij1, double *xcell_clon, double *xcell_clat,
-                                      int *approx_xcells_per_ij1, int *parent_input_indices, int *parent_output_indices,
-                                      double *xcell_areas, Xinfo_per_input_tile *xgrid_for_input_tile);
+void copy_data_to_interp_on_device_acc(const int nxcells, const int input_ncells, const int upbound_nxcells,
+                                       int *xcells_per_ij1, double *xcell_clon, double *xcell_clat,
+                                       int *approx_xcells_per_ij1, int *parent_input_indices, int *parent_output_indices,
+                                       double *xcell_areas, Interp_per_input_tile *interp_for_input_tile);
 #endif

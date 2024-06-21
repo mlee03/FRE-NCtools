@@ -26,6 +26,8 @@ LDADD = $(NETCDF_LDFLAGS) $(NETCDF_LIBS) $(RPATH_FLAGS)
 
 fregrid_acc_SOURCES = conserve_interp_acc.c \
                       conserve_interp_acc.h \
+                      bilinear_interp_acc.c \
+                      bilinear_interp_acc.h \
                       interp_utils_acc.c \
                       interp_utils_acc.h \
                       fregrid_utils_acc.c \

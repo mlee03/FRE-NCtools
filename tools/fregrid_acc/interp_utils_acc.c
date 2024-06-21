@@ -42,27 +42,27 @@ void delete_grid_from_device_acc( const int npoints, const double *lat, const do
 }
 
 /*******************************************************************************
-void copy_interp_to_device( Xgrid_config *interp )
+void copy_interp_to_device( Interp_config_acc *interp )
 Copies the interp struct to device
 *******************************************************************************/
-void copy_xgrid_to_device_acc( const int ntiles_in, const int ntiles_out, const Xgrid_config *xgrid,
+void copy_interp_to_device_acc( const int ntiles_in, const int ntiles_out, const Interp_config_acc *interp,
                                const unsigned int opcode )
 {
 
-#pragma acc enter data copyin(xgrid[:ntiles_out])
+#pragma acc enter data copyin(interp[:ntiles_out])
   for(int n=0 ; n<ntiles_out; n++) {
 
-#pragma acc enter data copyin( xgrid[n].per_intile[:ntiles_in] )
+#pragma acc enter data copyin( interp[n].per_intile[:ntiles_in] )
 
     for(int m=0 ; m<ntiles_in ; m++) {
 
-      int nxcells = xgrid[n].per_intile[m].nxcells;
-#pragma acc enter data copyin( xgrid[n].per_intile[m].input_parent_cell_indices[:nxcells], \
-                               xgrid[n].per_intile[m].output_parent_cell_indices[:nxcells], \
-                               xgrid[n].per_intile[m].xcell_area[:nxcells] )
+      int nxcells = interp[n].per_intile[m].nxcells;
+#pragma acc enter data copyin( interp[n].per_intile[m].input_parent_cell_indices[:nxcells], \
+                               interp[n].per_intile[m].output_parent_cell_indices[:nxcells], \
+                               interp[n].per_intile[m].xcell_area[:nxcells] )
         if( opcode & CONSERVE_ORDER2) {
-#pragma acc enter data copyin( xgrid[n].per_intile[m].dcentroid_lon[:nxcells], \
-                               xgrid[n].per_intile[m].dcentroid_lat[:nxcells])
+#pragma acc enter data copyin( interp[n].per_intile[m].dcentroid_lon[:nxcells], \
+                               interp[n].per_intile[m].dcentroid_lat[:nxcells])
         }
 
     } // ntiles_in
@@ -111,7 +111,7 @@ void get_bounding_indices_acc(const int ref_nlon_cells, const int ref_nlat_cells
 }
 /*******************************************************************************
 void get_input_skip_cells
-assign mask to skip input cells in xgrid creation
+assign mask to skip input cells in interp creation
 *******************************************************************************/
 void get_skip_cells_acc(const int mask_size, double *skip_cells)
 {
@@ -129,26 +129,26 @@ void free_skip_cells_on_all_acc(const int mask_size, double *skip_cells)
   free(skip_cells);
 }
 
-void create_xgrid_per_intile_arrays_on_device_acc(const int nxcells, const unsigned int opcode,
-                                                  Xinfo_per_input_tile *xgrid_per_intile)
+void create_interp_per_intile_arrays_on_device_acc(const int nxcells, const unsigned int opcode,
+                                                  Interp_per_input_tile *interp_per_intile)
 {
 
-  xgrid_per_intile->input_parent_cell_indices = (int *)malloc(nxcells *sizeof(int));
-  xgrid_per_intile->output_parent_cell_indices = (int *)malloc(nxcells *sizeof(int));
-  xgrid_per_intile->xcell_area = (double *)malloc(nxcells * sizeof(double));
+  interp_per_intile->input_parent_cell_indices = (int *)malloc(nxcells *sizeof(int));
+  interp_per_intile->output_parent_cell_indices = (int *)malloc(nxcells *sizeof(int));
+  interp_per_intile->xcell_area = (double *)malloc(nxcells * sizeof(double));
 
   if(opcode & CONSERVE_ORDER2) {
-    xgrid_per_intile->dcentroid_lon = (double *)malloc(nxcells*sizeof(double));
-    xgrid_per_intile->dcentroid_lat = (double *)malloc(nxcells*sizeof(double));
+    interp_per_intile->dcentroid_lon = (double *)malloc(nxcells*sizeof(double));
+    interp_per_intile->dcentroid_lat = (double *)malloc(nxcells*sizeof(double));
   }
 
-#pragma acc enter data create(xgrid_per_intile)
-#pragma acc enter data create(xgrid_per_intile->input_parent_cell_indices[:nxcells], \
-                              xgrid_per_intile->output_parent_cell_indices[:nxcells], \
-                              xgrid_per_intile->xcell_area[:nxcells])
+#pragma acc enter data create(interp_per_intile)
+#pragma acc enter data create(interp_per_intile->input_parent_cell_indices[:nxcells], \
+                              interp_per_intile->output_parent_cell_indices[:nxcells], \
+                              interp_per_intile->xcell_area[:nxcells])
   if(opcode & CONSERVE_ORDER2) {
-#pragma acc enter data create(xgrid_per_intile->dcentroid_lon[:nxcells], \
-                              xgrid_per_intile->dcentroid_lat[:nxcells])
+#pragma acc enter data create(interp_per_intile->dcentroid_lon[:nxcells], \
+                              interp_per_intile->dcentroid_lat[:nxcells])
   }
 
 
