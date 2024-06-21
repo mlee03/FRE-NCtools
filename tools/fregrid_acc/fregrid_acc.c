@@ -909,7 +909,6 @@ int main(int argc, char* argv[])
 
     if(fabs(latbegin+90) < EPSLN10) latbegin_in = -0.5*M_PI;
     else latbegin_in = latbegin*D2R;
-
     setup_bilinear_interp_acc(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode, dlon_in, dlat_in, lonbegin_in, latbegin_in );
   }
   else setup_conserve_interp_acc(ntiles_in, grid_in, ntiles_out, grid_out, interp, opcode);
