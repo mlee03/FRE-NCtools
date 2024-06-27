@@ -24,8 +24,8 @@
 
 typedef struct {
   int nxcells;
-  int *input_parent_cell_indices;
-  int *output_parent_cell_indices;
+  int *input_parent_cell_index;
+  int *output_parent_cell_index;
   double *xcell_area;
   double *dcentroid_lon;
   double *dcentroid_lat;
@@ -33,15 +33,15 @@ typedef struct {
 
 typedef struct {
   size_t nxcells;
-  int *input_parent_lon_indices;
-  int *input_parent_lat_indices;
-  int *output_parent_lon_indices;
-  int *output_parent_lat_indices;
+  int *input_parent_lon_index;
+  int *input_parent_lat_index;
+  int *output_parent_lon_index;
+  int *output_parent_lat_index;
   int *output_parent;
   int *input_parent_tile;
   double *dcentroid_lon;
   double *dcentroid_lat;
-  Interp_per_input_tile *per_intile;
+  Interp_per_input_tile *input_tile;
   double *xcell_area;
   double *weight;
   int    *index;
