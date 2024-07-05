@@ -50,23 +50,22 @@ void copy_interp_to_device_acc( const int ntiles_in, const int ntiles_out, const
 {
 
 #pragma acc enter data copyin(interp_acc[:ntiles_out])
-  for(int otile=0 ; otile<ntiles_out; otile++) {
+    for(int otile=0 ; otile<ntiles_out; otile++) {
 
 #pragma acc enter data copyin( interp_acc[otile].input_tile[:ntiles_in] )
 
-    for(int itile=0 ; itile<ntiles_in ; itile++) {
+      for(int itile=0 ; itile<ntiles_in ; itile++) {
 
-      int nxcells = interp_acc[otile].input_tile[itile].nxcells;
+        int nxcells = interp_acc[otile].input_tile[itile].nxcells;
 #pragma acc enter data copyin( interp_acc[otile].input_tile[itile].input_parent_cell_index[:nxcells], \
-                               interp_acc[otile].input_tile[itile].output_parent_cell_index[:nxcells],\
+                               interp_acc[otile].input_tile[itile].output_parent_cell_index[:nxcells], \
                                interp_acc[otile].input_tile[itile].xcell_area[:nxcells] )
         if( opcode & CONSERVE_ORDER2) {
 #pragma acc enter data copyin( interp_acc[otile].input_tile[itile].dcentroid_lon[:nxcells], \
                                interp_acc[otile].input_tile[itile].dcentroid_lat[:nxcells])
         }
-
-    } // ntiles_in
-  }//ntiles_out
+      } // ntiles_in
+    }//ntiles_out
 
 } //end copy_interp_to_device
 
