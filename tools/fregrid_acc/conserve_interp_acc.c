@@ -464,8 +464,8 @@ void check_area_conservation(const int ntiles_output_grid, const int ntiles_inpu
  doing conservative interpolation
 *******************************************************************************/
 void do_scalar_conserve_interp_acc(Interp_config_acc *interp_acc, int varid, int ntiles_input_grid, const Grid_config *input_grid,
-                                          int ntiles_output_grid, const Grid_config *output_grid, const Field_config *field_in,
-                                   Field_config *field_out, unsigned int opcode, int nz)
+                                   int ntiles_output_grid, const Grid_config *output_grid, const Field_config *field_in,
+                                   Field_config *field_out, unsigned int opcode)
 {
   int weights_exist = input_grid[0].weight_exist;;
   int cell_measures = field_in->var[varid].cell_measures;

@@ -27,11 +27,7 @@ void setup_conserve_interp_acc(int ntiles_in, Grid_config *grid_in, int ntiles_o
 
 void do_scalar_conserve_interp_acc(Interp_config_acc *interp_acc, int varid, int ntiles_in, const Grid_config *grid_in,
 			       int ntiles_out, const Grid_config *grid_out, const Field_config *field_in,
-			       Field_config *field_out, unsigned int opcode, int nz);
-
-void do_scalar_conserve_interp_order2_acc(Interp_config_acc *interp_acc, int varid, int ntiles_in, const Grid_config *grid_in,
-			       int ntiles_out, const Grid_config *grid_out, const Field_config *field_in,
-			       Field_config *field_out, unsigned int opcode, int nz);
+                                   Field_config *field_out, unsigned int opcode);
 
 void read_remap_file_acc(int ntiles_input_grid, int ntiles_output_grid,
                          Grid_config *output_grid, Grid_config *input_grid,

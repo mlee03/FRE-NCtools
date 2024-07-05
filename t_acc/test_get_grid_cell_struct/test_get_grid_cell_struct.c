@@ -18,6 +18,11 @@
  * <http://www.gnu.org/licenses/>.
  **********************************************************************/
 
+// This test tests the function test_get_grid_cell_struct used in fregrid_acc.
+// Properties of each grid cell in a smple made-up grid with no poles are computed
+// on the device.  This test ensures that the data transfer between the host and device
+// and computations have executed on the device as expected.
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -56,31 +61,38 @@ int main(){
 
   Answers answers;
   Grid_cells_struct_config grid_cells;
-  Grid_config grid[1];
+  Grid_config grid;
 
-  grid[0].nxc=NLON;
-  grid[0].nyc=NLAT;
-  grid[0].lonc = (double *)calloc( (NLON+1)*(NLAT+1), sizeof(double) );
-  grid[0].latc = (double *)calloc( (NLON+1)*(NLAT+1), sizeof(double) );
+  grid.nxc=NLON;
+  grid.nyc=NLAT;
+  grid.lonc = (double *)calloc( (NLON+1)*(NLAT+1), sizeof(double) );
+  grid.latc = (double *)calloc( (NLON+1)*(NLAT+1), sizeof(double) );
 
-  // no poles, do not need to worry about fix_lon
+  // set grid; no poles, do not need to worry about fix_lon
   for(int ilat=0 ; ilat<NLAT+1 ; ilat++) {
     double latitude = (-30.0 + dlat*ilat)*D2R;
     for(int ilon=0 ; ilon<NLON+1 ; ilon++) {
       int ipt=ilat*(NLON+1)+ilon;
-      grid[0].latc[ipt] = latitude;
-      grid[0].lonc[ipt] = (0.0 + dlon*ilon)*D2R;
+      grid.latc[ipt] = latitude;
+      grid.lonc[ipt] = (0.0 + dlon*ilon)*D2R;
     }
   }
 
-  copy_grid_to_device_acc((NLON+1)*(NLAT+1), grid[0].latc, grid[0].lonc);
-  get_grid_cells_struct_acc( NLON, NLAT, grid[0].lonc, grid[0].latc, &grid_cells);
+  // copy grid to device
+  copy_grid_to_device_acc((NLON+1)*(NLAT+1), grid.latc, grid.lonc);
 
-  get_answers(grid[0].lonc, grid[0].latc, &answers);
+  // get grid_cells
+  get_grid_cell_struct_acc( NLON, NLAT, &grid, &grid_cells);
+
+  // get answers
+  get_answers(grid.lonc, grid.latc, &answers);
 
   reset_cell_on_host(&grid_cells); //to verify data is copied out from device
+
+  // copyout grid_cells
   copy_cell_to_host(&grid_cells);
 
+  // check answers
   check_answers(&grid_cells, &answers);
 
   printf("TODO:  add check for areas");

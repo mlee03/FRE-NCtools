@@ -40,7 +40,7 @@
   -----------------------------------------------------------------------
 */
 
-// TODO:  vector and monotonic interpolation have been implemented yet.
+// TODO:  vector and monotonic interpolation have not been implemented yet.
 // TODO:  great_circle first order exchange grid creation has not been implemented yet.
 
 #include <stdlib.h>
@@ -970,7 +970,7 @@ int main(int argc, char* argv[])
                                           finer_step, fill_missing);
           else
             do_scalar_conserve_interp_acc(interp_acc, l, ntiles_in, grid_in, ntiles_out, grid_out, scalar_in,
-                                          scalar_out, opcode, scalar_in->var[l].nz);
+                                          scalar_out, opcode);
           if(vertical_interp) do_vertical_interp(&vgrid_in, &vgrid_out, grid_out, scalar_out, l);
           write_field_data(ntiles_out, scalar_out, grid_out, l, -1, level_n, m);
           if(scalar_out->var[l].interp_method == CONSERVE_ORDER2) {
@@ -998,7 +998,7 @@ int main(int argc, char* argv[])
                                             scalar_in, scalar_out, finer_step, fill_missing);
             else
               do_scalar_conserve_interp_acc(interp_acc, l, ntiles_in, grid_in, ntiles_out, grid_out,
-                                            scalar_in, scalar_out, opcode,1);
+                                            scalar_in, scalar_out, opcode);
             if(debug) {
               time_end = clock();
               time_do_interp += 1.0*(time_end - time_start)/CLOCKS_PER_SEC;

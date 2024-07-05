@@ -222,9 +222,9 @@ AC_CONFIG_FILES([Makefile
                  t/Makefile
                  t_acc/Makefile
                  t_acc/test_read_remap_file/Makefile
-                 t_acc/test_get_cell_minmaxavg_latlons/Makefile
+                 t_acc/test_get_grid_cell_struct/Makefile
                  t_acc/test_get_upbound_nxcells_2dx2d/Makefile
-                 t_acc/test_get_xgrid_order1/Makefile
+                 t_acc/test_get_interp_order1/Makefile
 
 ])
 

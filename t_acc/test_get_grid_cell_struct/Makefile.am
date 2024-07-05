@@ -17,7 +17,7 @@
 #* License along with FMS.  If not, see <http://www.gnu.org/licenses/>.
 #***********************************************************************
 
-check_PROGRAMS = test_get_cell_minmaxavg_latlons
+check_PROGRAMS = test_get_grid_cell_struct
 
 AM_CFLAGS =  $(NETCDF_CFLAGS) \
             -I$(top_srcdir)/tools/fregrid_acc \
@@ -29,6 +29,6 @@ LDADD = $(NETCDF_LDFLAGS) $(NETCDF_LIBS) $(RPATH_FLAGS) \
         $(top_builddir)/tools/libfrencutils/libfrencutils.a \
         $(top_builddir)/tools/libfrencutils_acc/libfrencutils_acc.a
 
-test_get_cell_minmaxavg_latlons = test_get_cell_minmaxavg_latlons.c
+test_get_grid_cell_struct = test_get_grid_cell_struct.c
 
-TESTS = test_get_cell_minmaxavg_latlons
+TESTS = test_get_grid_cell_struct
