@@ -24,6 +24,7 @@
 #include "globals_acc.h"
 #include "general_utils_acc.h"
 #include "bilinear_interp_acc.h"
+#include "interp_utils_acc.h"
 #include "mpp_io.h"
 #include "mpp.h"
 
@@ -52,12 +53,12 @@ int get_closest_index_acc(const Grid_config *input_grid, const Grid_config *outp
 int get_interp_index_wrong(const int input_ntiles, const int iter, const Grid_config *input_grid,
                            const Grid_config *output_grid, const double dlon_in, const double dlat_in,
                            const double lonbegin, const double latbegin, int *found, Interp_config_acc *interp_acc);
-void read_remap_file(Grid_config *output_grid, const Interp_config_acc *interp_acc);
+void read_remap_file(const Grid_config *output_grid, const Interp_config_acc *interp_acc);
 int get_interp_index_test( const int input_ntiles, const int iter, const Grid_config *input_grid,
                            const Grid_config *output_grid, const double dlon_in, const double dlat_in,
                            const double lonbegin, const double latbegin, Interp_config_acc *interp_acc);
 #pragma acc routine seq
-void get_vector(const Grid_config *input_grid, const int icell, double *vector);
+void get_vector(const Grid_config *grid, const int icell, double *vector);
 
 /*******************************************************************************
   void setup_bilinear_interp( )
@@ -122,19 +123,9 @@ void setup_bilinear_interp_acc(int input_ntiles, const Grid_config *input_grid,
     return;
   }
 
-#pragma acc enter data copyin(interp_acc[:1])
-#pragma acc enter data create(interp_acc->index[:3*nlon_output_cells*nlat_output_cells], \
-                              interp_acc->weight[:4*nlon_output_cells*nlat_output_cells])
-#pragma acc enter data copyin(output_grid[:1])
-#pragma acc enter data copyin(output_grid->xt[:nlon_output_cells*nlat_output_cells], \
-                              output_grid->yt[:nlon_output_cells*nlat_output_cells], \
-                              output_grid->zt[:nlon_output_cells*nlat_output_cells])
-#pragma acc enter data copyin(input_grid[:input_ntiles])
-  for(int itile=0 ; itile<input_ntiles ; itile++) {
-#pragma acc enter data copyin(input_grid[itile].xt[:nxd*nyd], \
-                              input_grid[itile].yt[:nxd*nyd],\
-                              input_grid[itile].zt[:nxd*nyd])
-  }
+  enter_bilinear_interp_to_device_acc(nlon_output_cells*nlat_output_cells, interp_acc);
+  copy_bilinear_grid_to_device_acc(output_ntiles, nlon_output_cells*nlat_output_cells, output_grid);
+  copy_bilinear_grid_to_device_acc(input_ntiles, nxd*nyd, input_grid);
 
   /*------------------------------------------------------------------
     find lower left corner on cubed sphere for given latlon location
@@ -153,6 +144,9 @@ void setup_bilinear_interp_acc(int input_ntiles, const Grid_config *input_grid,
     double check if lower left corner was found
     calculate weights for interpolation
     ------------------------------------------------------------------*/
+
+  int ncells_output = nlon_output_cells * nlat_output_cells;
+
 #pragma acc data present(interp_acc[:1], input_grid[:input_ntiles], output_grid[:1])
 #pragma acc parallel loop collapse(2)
   for(int j=0; j<nlat_output_cells; j++) {
@@ -1058,7 +1052,7 @@ int get_interp_index_wrong( const int input_ntiles, const int iter, const Grid_c
 }
 
 
-void read_remap_file(Grid_config *output_grid, const Interp_config_acc *interp_acc)
+void read_remap_file(const Grid_config *output_grid, const Interp_config_acc *interp_acc)
 {
   // check the size of the grid matching the size in remapping file
   printf("NOTE: reading index and weight for bilinear interpolation from file.\n");
@@ -1123,8 +1117,7 @@ int get_interp_index_test( const int input_ntiles, const int iter, const Grid_co
 
     int i2_start=ncells_output, i2_end=0, j2_start=ncells_output, j2_end=0;
 
-#pragma acc data present(input_grid[:input_ntiles],      \
-                         input_grid[itile].xt[:nxd*nyd],  \
+#pragma acc data present(input_grid[itile].xt[:nxd*nyd],  \
                          input_grid[itile].yt[:nxd*nyd],  \
                          input_grid[itile].zt[:nxd*nyd])
 #pragma acc data copyin(input_grid[itile].latt[:nxd*nyd], input_grid[itile].lont[:nxd*nyd])
@@ -1209,15 +1202,13 @@ int get_interp_index_test( const int input_ntiles, const int iter, const Grid_co
       }
     }
 
-#pragma acc data present(input_grid[:input_ntiles],        \
-                         output_grid[:1],                  \
-                         input_grid[itile].xt[:nxd*nyd],   \
+#pragma acc data present(input_grid[itile].xt[:nxd*nyd],   \
                          input_grid[itile].yt[:nxd*nyd],   \
                          input_grid[itile].zt[:nxd*nyd],   \
                          output_grid->xt[:ncells_output],     \
                          output_grid->yt[:ncells_output],     \
                          output_grid->zt[:ncells_output],     \
-                         interp_acc->index[:ncells_output])
+                         interp_acc->index[:3*ncells_output])
 #pragma acc data deviceptr(shortest, found, i1_min, j1_min, i1_max, j1_max)\
                     copyin(i2_start, j2_start, i2_end, j2_end)
 #pragma acc parallel loop collapse(2)
@@ -1276,11 +1267,11 @@ int get_interp_index_test( const int input_ntiles, const int iter, const Grid_co
 }
 
 
-void get_vector(const Grid_config *input_grid, const int icell, double *vector)
+void get_vector(const Grid_config *grid, const int icell, double *vector)
 {
 
-  vector[0] = input_grid->xt[icell];
-  vector[1] = input_grid->yt[icell];
-  vector[2] = input_grid->zt[icell];
+  vector[0] = grid->xt[icell];
+  vector[1] = grid->yt[icell];
+  vector[2] = grid->zt[icell];
 
 }

@@ -26,8 +26,18 @@ void copy_latlon_grid_to_device_acc( const int npoints, const double *lat, const
 
 void delete_latlon_grid_from_device_acc( const int npoints, const double *lat, const double *lon );
 
-void copy_interp_to_device_acc( const int ntiles_in, const int ntiles_out, const Interp_config_acc *interp_acc,
-                                const unsigned int opcode );
+void copy_xyz_grid_to_device_acc( const int npoints, const double *x, const double *y, const double *z);
+
+void delete_xyz_grid_to_device_acc( const int npoints, const double *x, const double *y, const double *z);
+
+void copy_bilinear_grid_to_device_acc( const int ntiles, const int ncells, const Grid_config *grid );
+
+void delete_bilinear_grid_from_device_acc( const int ntiles, const int ncells, const Grid_config *grid );
+
+void copy_conserve_interp_to_device_acc(const int ntiles_in, const int ntiles_out, const Interp_config_acc *interp_acc,
+                                        const unsigned int opcode );
+
+void enter_bilinear_interp_to_device_acc( const int ncells, Interp_config_acc *interp_acc );
 
 void get_input_grid_mask_acc(const int mask_size, double **input_grid_mask);
 

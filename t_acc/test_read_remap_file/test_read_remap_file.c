@@ -121,7 +121,7 @@ int main(int argc, char *argv[]) {
 
   // read in remap and transfer data to device
   read_remap_file_acc(INPUT_GRID_NTILES, OUTPUT_GRID_NTILES, &output_grid, &input_grid, interp_acc, opcode);
-  copy_interp_to_device_acc(INPUT_GRID_NTILES, OUTPUT_GRID_NTILES, interp_acc, opcode) ;
+  copy_conserve_interp_to_device_acc(INPUT_GRID_NTILES, OUTPUT_GRID_NTILES, interp_acc, opcode) ;
 
   // read in answers from txt file
   read_all_answers(answers, myinterp_method);

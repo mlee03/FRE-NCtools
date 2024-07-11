@@ -42,33 +42,79 @@ void delete_latlon_grid_from_device_acc( const int npoints, const double *lat, c
 
 }
 
+void copy_xyz_grid_to_device_acc( const int npoints, const double *x, const double *y, const double *z)
+{
+
+#pragma acc enter data copyin(x[:npoints], y[:npoints], z[:npoints])
+
+}
+
+void delete_xyz_grid_to_device_acc( const int npoints, const double *x, const double *y, const double *z)
+{
+
+#pragma acc exit data delete(x[:npoints], y[:npoints], z[:npoints])
+
+}
+
+
+void copy_bilinear_grid_to_device_acc( const int ntiles, const int ncells, const Grid_config *grid )
+{
+
+#pragma acc enter data copyin( grid[:ntiles] )
+  for(int itile=0 ; itile<ntiles ; itile++) {
+#pragma acc enter data copyin( grid[itile].xt[:ncells], grid[itile].yt[:ncells], grid[itile].zt[:ncells])
+  }
+
+}
+
+void delete_bilinear_grid_from_device_acc( const int ntiles, const int ncells, const Grid_config *grid )
+{
+
+  for(int itile=0 ; itile<ntiles ; itile++) {
+#pragma acc exit data delete( grid[itile].xt[:ncells], grid[itile].yt[:ncells], grid[itile].zt[:ncells])
+  }
+#pragma acc exit data delete( grid[:ntiles] )
+
+}
+
+
 /*******************************************************************************
-void copy_interp_to_device( Interp_config *interp )
+void copy_conserve_interp_to_device( Interp_config *interp )
 Copies the interp struct to device
 *******************************************************************************/
-void copy_interp_to_device_acc( const int ntiles_in, const int ntiles_out, const Interp_config_acc *interp_acc,
-                                const unsigned int opcode )
+void copy_conserve_interp_to_device_acc( const int ntiles_in, const int ntiles_out, const Interp_config_acc *interp_acc,
+                                         const unsigned int opcode )
 {
 
 #pragma acc enter data copyin(interp_acc[:ntiles_out])
-    for(int otile=0 ; otile<ntiles_out; otile++) {
+  for(int otile=0 ; otile<ntiles_out; otile++) {
 
 #pragma acc enter data copyin( interp_acc[otile].input_tile[:ntiles_in] )
 
-      for(int itile=0 ; itile<ntiles_in ; itile++) {
+    for(int itile=0 ; itile<ntiles_in ; itile++) {
 
-        int nxcells = interp_acc[otile].input_tile[itile].nxcells;
+      int nxcells = interp_acc[otile].input_tile[itile].nxcells;
 #pragma acc enter data copyin( interp_acc[otile].input_tile[itile].input_parent_cell_index[:nxcells], \
                                interp_acc[otile].input_tile[itile].output_parent_cell_index[:nxcells], \
                                interp_acc[otile].input_tile[itile].xcell_area[:nxcells] )
-        if( opcode & CONSERVE_ORDER2) {
+      if( opcode & CONSERVE_ORDER2) {
 #pragma acc enter data copyin( interp_acc[otile].input_tile[itile].dcentroid_lon[:nxcells], \
                                interp_acc[otile].input_tile[itile].dcentroid_lat[:nxcells])
-        }
-      } // ntiles_in
-    }//ntiles_out
+      }
+    } // ntiles_in
+  }//ntiles_out
 
-} //end copy_interp_to_device
+
+} //end copy_conserve_interp_to_device
+
+void enter_bilinear_interp_to_device_acc( const int ncells, Interp_config_acc *interp_acc )
+{
+
+#pragma acc enter data copyin(interp_acc[:1])
+#pragma acc enter data create(interp_acc->index[:3*ncells], interp_acc->weight[:4*ncells])
+
+}
+
 
 /*******************************************************************************
 void get_input_skip_cells

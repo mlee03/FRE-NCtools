@@ -43,7 +43,7 @@ void setup_conserve_interp_acc(int ntiles_input_grid, Grid_config *input_grid, i
 
   if( opcode & READ) {
     read_remap_file_acc(ntiles_input_grid, ntiles_output_grid, output_grid, input_grid, interp_acc, opcode);
-    copy_interp_to_device_acc(ntiles_input_grid, ntiles_output_grid, interp_acc, opcode);
+    copy_conserve_interp_to_device_acc(ntiles_input_grid, ntiles_output_grid, interp_acc, opcode);
     return;
   }
 
