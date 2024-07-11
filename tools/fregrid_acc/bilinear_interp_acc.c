@@ -54,11 +54,15 @@ int get_interp_index_wrong(const int input_ntiles, const int iter, const Grid_co
                            const Grid_config *output_grid, const double dlon_in, const double dlat_in,
                            const double lonbegin, const double latbegin, int *found, Interp_config_acc *interp_acc);
 void read_remap_file(const Grid_config *output_grid, const Interp_config_acc *interp_acc);
-int get_interp_index_test( const int input_ntiles, const int iter, const Grid_config *input_grid,
-                           const Grid_config *output_grid, const double dlon_in, const double dlat_in,
-                           const double lonbegin, const double latbegin, Interp_config_acc *interp_acc);
+void get_interp_index_test( const int input_ntiles, const int iter, const Grid_config *input_grid,
+                            const Grid_config *output_grid, const double dlon_in, const double dlat_in,
+                            const double lonbegin, const double latbegin, Interp_config_acc *interp_acc);
+void get_interp_weights(const int input_ntiles, const int output_ntiles, const Grid_config *output_grid,
+                        const Grid_config *input_grid, Interp_config_acc *interp_acc);
 #pragma acc routine seq
 void get_vector(const Grid_config *grid, const int icell, double *vector);
+void write_bilinear_remap_file(const int nlon_output_cells, const int nlat_output_cells, Interp_config_acc *interp_acc);
+void write_bilinear_interp_in_not_zhi_format(const int ncells, Interp_config_acc *interp_acc);
 
 /*******************************************************************************
   void setup_bilinear_interp( )
@@ -88,13 +92,17 @@ void setup_bilinear_interp_acc(int input_ntiles, const Grid_config *input_grid,
                                double lonbegin, double latbegin)
 {
   const int max_iter = 10;
-  int    nlon_input_cells, nlat_input_cells, nlon_output_cells, nlat_output_cells, nxd, nyd;
+  int nlon_output_cells = output_grid->nx_fine;
+  int nlat_output_cells = output_grid->ny_fine;
+  int ncells_output = nlon_output_cells * nlat_output_cells;
+  int nxd = input_grid->nx + 2;
+  int nyd = input_grid->ny + 2;
 
   // input_ntiles must be six and output_ntiles must be one
   if(input_ntiles != 6) mpp_error("Error from bilinear_interp: source mosaic should be cubic mosaic "
-			       "and have six tiles when using bilinear option");
+                      			       "and have six tiles when using bilinear option");
   if(output_ntiles != 1) mpp_error("Error from bilinear_interp: destination mosaic should be "
-				"one tile lat-lon grid when using bilinear option");
+                            				"one tile lat-lon grid when using bilinear option");
 
   /*------------------------------------------------------------------!
    ! cubed sphere: cartesian coordinates of cell corners,             !
@@ -103,19 +111,9 @@ void setup_bilinear_interp_acc(int input_ntiles, const Grid_config *input_grid,
    !               calculate latlon unit vector                       !
    !-----------------------------------------------------------------*/
 
-  // calculation is done on the fine grid
-  nlon_output_cells  = output_grid->nx_fine;
-  nlat_output_cells  = output_grid->ny_fine;
 
-  //the cubic grid has same resolution on each face
-  nlon_input_cells = input_grid->nx;
-  nlat_input_cells = input_grid->ny;
-
-  nxd = nlon_input_cells + 2;
-  nyd = nlat_input_cells + 2;
-
-  interp_acc->index  = (int    *)malloc(3*nlon_output_cells*nlat_output_cells*sizeof(int   ));
-  interp_acc->weight = (double *)malloc(4*nlon_output_cells*nlat_output_cells*sizeof(double));
+  interp_acc->index  = (int    *)malloc(3*ncells_output*sizeof(int));
+  interp_acc->weight = (double *)malloc(4*ncells_output*sizeof(double));
 
   // read from file
   if( (opcode & READ) && interp_acc->file_exist ) {
@@ -123,201 +121,29 @@ void setup_bilinear_interp_acc(int input_ntiles, const Grid_config *input_grid,
     return;
   }
 
-  enter_bilinear_interp_to_device_acc(nlon_output_cells*nlat_output_cells, interp_acc);
-  copy_bilinear_grid_to_device_acc(output_ntiles, nlon_output_cells*nlat_output_cells, output_grid);
+  enter_bilinear_interp_to_device_acc(ncells_output, interp_acc);
+  copy_bilinear_grid_to_device_acc(output_ntiles, ncells_output, output_grid);
   copy_bilinear_grid_to_device_acc(input_ntiles, nxd*nyd, input_grid);
 
-  /*------------------------------------------------------------------
-    find lower left corner on cubed sphere for given latlon location
-    ------------------------------------------------------------------*/
 
-  int iter=max_iter;
-  int total_found = 0;
-  total_found = get_interp_index_test(input_ntiles, iter, input_grid, output_grid, dlon_in, dlat_in,
-                                      lonbegin, latbegin, interp_acc);
-  if(total_found != nlon_output_cells*nlat_output_cells) {
-    printf("did not find all neighboring points for each output cell %d %d", total_found, nlon_output_cells*nlat_output_cells);
-    exit(1);
-  }
+  //find lower left corner on cubed sphere for given latlon location
+  get_interp_index_test(input_ntiles, max_iter, input_grid, output_grid, dlon_in, dlat_in, lonbegin, latbegin, interp_acc);
 
-  /*------------------------------------------------------------------
-    double check if lower left corner was found
-    calculate weights for interpolation
-    ------------------------------------------------------------------*/
 
-  int ncells_output = nlon_output_cells * nlat_output_cells;
+  // calculate weights for interpolation
+  get_interp_weights(input_ntiles, output_ntiles, output_grid, input_grid, interp_acc);
 
-#pragma acc data present(interp_acc[:1], input_grid[:input_ntiles], output_grid[:1])
-#pragma acc parallel loop collapse(2)
-  for(int j=0; j<nlat_output_cells; j++) {
-    for(int i=0; i<nlon_output_cells; i++) {
 
-      int n0 = j*nlon_output_cells + i;
-      int m0 = 3*n0;
-      int m1 = 4*n0;
-      int ic = interp_acc->index[m0];
-      int jc = interp_acc->index[m0+1];
-      int itile = interp_acc->index[m0+2];
-      int n1, n2, n3, n4;
-      double v0[3], v1[3], v2[3], v3[3], v4[3];
-      double dist1, dist2, dist3, dist4;
-      double sum;
+#pragma acc update host(interp_acc->index[:3*ncells_output], interp_acc->weight[:4*ncells_output])
 
-      get_vector(output_grid, n0, v0);
-
-      //The section of the code that double checks that found == 0 for
-      //all output cells been removed because it looked very buggy.
-
-      /*------------------------------------------------------------
-        calculate shortest distance to each side of rectangle
-        formed by cubed sphere cell centers
-        special corner treatment
-        ------------------------------------------------------------*/
-
-      if (ic==nlon_input_cells && jc==nlat_input_cells) {
-        /*------------------------------------------------------------
-          calculate weights for bilinear interpolation near corner
-          ------------------------------------------------------------*/
-        n1 = jc*nxd+ic;     get_vector(input_grid+itile, n1, v1);
-        n2 = jc*nxd+ic+1;   get_vector(input_grid+itile, n2, v2);
-        n3 = (jc+1)*nxd+ic; get_vector(input_grid+itile, n3, v3);
-
-        interp_acc->weight[m1]  =dist2side_acc(v2, v3, v0);  //ic,   jc    weight
-        interp_acc->weight[m1+1]=dist2side_acc(v2, v1, v0);  //ic,   jc+1  weight
-        interp_acc->weight[m1+2]=0.;                         //ic+1, jc+1  weight
-        interp_acc->weight[m1+3]=dist2side_acc(v1, v3, v0);  //ic+1, jc    weight
-        sum=interp_acc->weight[m1] + interp_acc->weight[m1+1] + interp_acc->weight[m1+2] + interp_acc->weight[m1+3];
-        interp_acc->weight[m1]  /=sum;
-        interp_acc->weight[m1+1]/=sum;
-        interp_acc->weight[m1+2]/=sum;
-        interp_acc->weight[m1+3]/=sum;
-        continue;
-      }
-      if (ic==0 && jc==nlat_input_cells) {
-        /*------------------------------------------------------------
-          calculate weights for bilinear interpolation near corner
-          ------------------------------------------------------------*/
-        n1 = jc*nxd+ic;       get_vector(input_grid+itile, n1, v1);
-        n2 = jc*nxd+ic+1;     get_vector(input_grid+itile, n2, v2);
-        n3 = (jc+1)*nxd+ic+1; get_vector(input_grid+itile, n3, v3);
-
-        interp_acc->weight[m1]=dist2side_acc(v3, v2, v0);   // ic,   jc    weight
-        interp_acc->weight[m1+1]=0.;                        // ic,   jc+1  weight
-        interp_acc->weight[m1+2]=dist2side_acc(v2, v1, v0); // ic+1, jc+1  weight
-        interp_acc->weight[m1+3]=dist2side_acc(v3, v1, v0); // ic+1, jc    weight
-        sum=interp_acc->weight[m1] + interp_acc->weight[m1+1] + interp_acc->weight[m1+2] + interp_acc->weight[m1+3];
-        interp_acc->weight[m1]  /=sum;
-        interp_acc->weight[m1+1]/=sum;
-        interp_acc->weight[m1+2]/=sum;
-        interp_acc->weight[m1+3]/=sum;
-        continue;
-      }
-      if (jc==0 && ic==nlon_input_cells) {
-        /*------------------------------------------------------------
-          calculate weights for bilinear interpolation near corner
-          ------------------------------------------------------------*/
-        n1 = jc*nxd+ic;       get_vector(input_grid+itile, n1, v1);
-        n2 = (jc+1)*nxd+ic;   get_vector(input_grid+itile, n2, v2);
-        n3 = (jc+1)*nxd+ic+1; get_vector(input_grid+itile, n3, v3);
-
-        interp_acc->weight[m1]  =dist2side_acc(v2, v3, v0); // ic,   jc    weight
-        interp_acc->weight[m1+1]=dist2side_acc(v1, v3, v0); // ic,   jc+1  weight
-        interp_acc->weight[m1+2]=dist2side_acc(v1, v2, v0); // ic+1, jc+1  weight
-        interp_acc->weight[m1+3]=0.;                        // ic+1, jc    weight
-        sum=interp_acc->weight[m1] + interp_acc->weight[m1+1] + interp_acc->weight[m1+2] + interp_acc->weight[m1+3];
-        interp_acc->weight[m1]  /=sum;
-        interp_acc->weight[m1+1]/=sum;
-        interp_acc->weight[m1+2]/=sum;
-        interp_acc->weight[m1+3]/=sum;
-        continue;
-      }
-      /*------------------------------------------------------------
-        calculate weights for bilinear interpolation if no corner
-        ------------------------------------------------------------*/
-      n1 = jc*nxd+ic;       get_vector(input_grid+itile, n1, v1);
-      n2 = jc*nxd+ic+1;     get_vector(input_grid+itile, n2, v2);
-      n3 = (jc+1)*nxd+ic;   get_vector(input_grid+itile, n3, v3);
-      n4 = (jc+1)*nxd+ic+1; get_vector(input_grid+itile, n4, v4);
-
-      dist1=dist2side_acc(v1, v3, v0);
-      dist2=dist2side_acc(v3, v4, v0);
-      dist3=dist2side_acc(v4, v2, v0);
-      dist4=dist2side_acc(v2, v1, v0);
-
-      interp_acc->weight[m1]  =dist2*dist3; // ic,   jc    weight
-      interp_acc->weight[m1+1]=dist3*dist4; // ic,   jc+1  weight
-      interp_acc->weight[m1+2]=dist4*dist1; // ic+1, jc+1  weight
-      interp_acc->weight[m1+3]=dist1*dist2; // ic+1, jc    weight
-
-      sum=interp_acc->weight[m1] + interp_acc->weight[m1+1] + interp_acc->weight[m1+2] + interp_acc->weight[m1+3];
-      interp_acc->weight[m1]  /=sum;
-      interp_acc->weight[m1+1]/=sum;
-      interp_acc->weight[m1+2]/=sum;
-      interp_acc->weight[m1+3]/=sum;
-    }
-  }
-
-#pragma acc update host(interp_acc->index[:3*nlon_output_cells*nlat_output_cells], \
-                        interp_acc->weight[:4*nlon_output_cells*nlat_output_cells])
 
   /* write out weight information if needed */
-  if( opcode & WRITE ) {
-    int fid, dim_three, dim_four, dim_nlon, dim_nlat, dims[3];
-    int fld_index, fld_weight;
-
-    fid = mpp_open( interp_acc->remap_file, MPP_WRITE);
-    dim_nlon = mpp_def_dim(fid, "nlon", nlon_output_cells);
-    dim_nlat = mpp_def_dim(fid, "nlat", nlat_output_cells);
-    dim_three = mpp_def_dim(fid, "three", 3);
-    dim_four  = mpp_def_dim(fid, "four", 4);
-
-    dims[0] = dim_three; dims[1] = dim_nlat; dims[2] = dim_nlon;
-    fld_index = mpp_def_var(fid, "index", NC_INT, 3, dims, 0);
-    dims[0] = dim_four; dims[1] = dim_nlat; dims[2] = dim_nlon;
-    fld_weight = mpp_def_var(fid, "weight", NC_DOUBLE, 3, dims, 0);
-    mpp_end_def(fid);
-    mpp_put_var_value(fid, fld_index, interp_acc->index);
-    mpp_put_var_value(fid, fld_weight, interp_acc->weight);
-    mpp_close(fid);
-  }
-
-  /* write out weight information if needed */
-  if( opcode & WRITE ) {
-    int fid;
-    int fld_index1, fld_index2, fld_index3, dim_ncells;
-
-    int *array1 ; array1 = (int *)malloc(nlon_output_cells*nlat_output_cells*sizeof(int));
-    int *array2 ; array2 = (int *)malloc(nlon_output_cells*nlat_output_cells*sizeof(int));
-    int *array3 ; array3 = (int *)malloc(nlon_output_cells*nlat_output_cells*sizeof(int));
-
-    fid = mpp_open( "test_remap.nc", MPP_WRITE);
-    dim_ncells = mpp_def_dim(fid, "ncells", nlon_output_cells*nlat_output_cells);
-
-    for(int i=0 ; i<nlon_output_cells*nlat_output_cells ; i++) {
-      array1[i] = interp_acc->index[3*i];
-      array2[i] = interp_acc->index[3*i+1];
-      array3[i] = interp_acc->index[3*i+2];
-    }
-
-    fld_index1 = mpp_def_var(fid, "i_index", NC_INT, 1, &dim_ncells, 0);
-    fld_index2 = mpp_def_var(fid, "j_index", NC_INT, 1, &dim_ncells, 0);
-    fld_index3 = mpp_def_var(fid, "tile_index", NC_INT, 1, &dim_ncells, 0);
-    mpp_end_def(fid);
-
-    mpp_put_var_value(fid, fld_index1, array1);
-    mpp_put_var_value(fid, fld_index2, array2);
-    mpp_put_var_value(fid, fld_index3, array3);
-    mpp_close(fid);
-  }
+  if( opcode & WRITE ) write_bilinear_remap_file(nlon_output_cells, nlat_output_cells, interp_acc);
 
 
-#pragma acc exit data delete(output_grid->xt[:nlon_output_cells*nlat_output_cells], \
-                             output_grid->yt[:nlon_output_cells*nlat_output_cells], \
-                             output_grid->zt[:nlon_output_cells*nlat_output_cells], \
-                             input_grid->xt[:nxd*nyd],                  \
-                             input_grid->yt[:nxd*nyd],                  \
-                             input_grid->zt[:nxd*nyd] )
-#pragma acc exit data delete(output_grid[:1], input_grid[:input_ntiles])
+  delete_bilinear_grid_from_device_acc(output_ntiles, ncells_output, output_grid);
+  delete_bilinear_grid_from_device_acc(input_ntiles, nxd*nyd, input_grid);
+
 
   printf("\n done calculating interp_index and interp_weight\n");
 
@@ -1084,9 +910,9 @@ void read_remap_file(const Grid_config *output_grid, const Interp_config_acc *in
 }
 
 
-int get_interp_index_test( const int input_ntiles, const int iter, const Grid_config *input_grid,
-                           const Grid_config *output_grid, const double dlon_in, const double dlat_in,
-                           const double lonbegin, const double latbegin, Interp_config_acc *interp_acc)
+void get_interp_index_test( const int input_ntiles, const int iter, const Grid_config *input_grid,
+                            const Grid_config *output_grid, const double dlon_in, const double dlat_in,
+                            const double lonbegin, const double latbegin, Interp_config_acc *interp_acc)
 {
 
   int total_found = 0;
@@ -1262,7 +1088,129 @@ int get_interp_index_test( const int input_ntiles, const int iter, const Grid_co
   acc_free(found);
   acc_free(shortest);
 
-  return total_found;
+  if(total_found != ncells_output) {
+    printf("did not find all neighboring points for each output cell %d %d", total_found, ncells_output);
+    exit(1);
+  }
+
+}
+
+
+void get_interp_weights(const int input_ntiles, const int output_ntiles, const Grid_config *output_grid,
+                        const Grid_config *input_grid, Interp_config_acc *interp_acc)
+{
+
+  int nlon_output_cells = output_grid->nx_fine;
+  int nlat_output_cells = output_grid->ny_fine;
+  int nlon_input_cells = input_grid->nx;
+  int nlat_input_cells = input_grid->ny;
+  int nxd = nlon_input_cells + 2;
+  int nyd = nlat_input_cells + 2;
+
+#pragma acc data present(interp_acc[:1], input_grid[:input_ntiles], output_grid[:output_ntiles])
+#pragma acc parallel loop collapse(2)
+  for(int j=0; j<nlat_output_cells; j++) {
+    for(int i=0; i<nlon_output_cells; i++) {
+
+      int n0 = j*nlon_output_cells + i;
+      int m0 = 3*n0;
+      int m1 = 4*n0;
+      int ic = interp_acc->index[m0];
+      int jc = interp_acc->index[m0+1];
+      int itile = interp_acc->index[m0+2];
+      int n1, n2, n3, n4;
+      double v0[3], v1[3], v2[3], v3[3], v4[3];
+      double dist1, dist2, dist3, dist4;
+      double sum;
+
+      get_vector(output_grid, n0, v0);
+
+      //The section of the code that double checks that found == 0 for
+      //all output cells been removed because it looked very buggy.
+
+      /*------------------------------------------------------------
+        calculate shortest distance to each side of rectangle
+        formed by cubed sphere cell centers
+        special corner treatment
+        ------------------------------------------------------------*/
+
+      if (ic==nlon_input_cells && jc==nlat_input_cells) {
+        /*------------------------------------------------------------
+          calculate weights for bilinear interpolation near corner
+          ------------------------------------------------------------*/
+        n1 = jc*nxd+ic;     get_vector(input_grid+itile, n1, v1);
+        n2 = jc*nxd+ic+1;   get_vector(input_grid+itile, n2, v2);
+        n3 = (jc+1)*nxd+ic; get_vector(input_grid+itile, n3, v3);
+
+        interp_acc->weight[m1]  =dist2side_acc(v2, v3, v0);  //ic,   jc    weight
+        interp_acc->weight[m1+1]=dist2side_acc(v2, v1, v0);  //ic,   jc+1  weight
+        interp_acc->weight[m1+2]=0.;                         //ic+1, jc+1  weight
+        interp_acc->weight[m1+3]=dist2side_acc(v1, v3, v0);  //ic+1, jc    weight
+        sum=interp_acc->weight[m1] + interp_acc->weight[m1+1] + interp_acc->weight[m1+2] + interp_acc->weight[m1+3];
+        interp_acc->weight[m1]  /=sum;
+        interp_acc->weight[m1+1]/=sum;
+        interp_acc->weight[m1+2]/=sum;
+        interp_acc->weight[m1+3]/=sum;
+        continue;
+      }
+      if (ic==0 && jc==nlat_input_cells) {
+        // calculate weights for bilinear interpolation near corner
+        n1 = jc*nxd+ic;       get_vector(input_grid+itile, n1, v1);
+        n2 = jc*nxd+ic+1;     get_vector(input_grid+itile, n2, v2);
+        n3 = (jc+1)*nxd+ic+1; get_vector(input_grid+itile, n3, v3);
+
+        interp_acc->weight[m1]=dist2side_acc(v3, v2, v0);   // ic,   jc    weight
+        interp_acc->weight[m1+1]=0.;                        // ic,   jc+1  weight
+        interp_acc->weight[m1+2]=dist2side_acc(v2, v1, v0); // ic+1, jc+1  weight
+        interp_acc->weight[m1+3]=dist2side_acc(v3, v1, v0); // ic+1, jc    weight
+        sum=interp_acc->weight[m1] + interp_acc->weight[m1+1] + interp_acc->weight[m1+2] + interp_acc->weight[m1+3];
+        interp_acc->weight[m1]  /=sum;
+        interp_acc->weight[m1+1]/=sum;
+        interp_acc->weight[m1+2]/=sum;
+        interp_acc->weight[m1+3]/=sum;
+        continue;
+      }
+      if (jc==0 && ic==nlon_input_cells) {
+        // calculate weights for bilinear interpolation near corner
+        n1 = jc*nxd+ic;       get_vector(input_grid+itile, n1, v1);
+        n2 = (jc+1)*nxd+ic;   get_vector(input_grid+itile, n2, v2);
+        n3 = (jc+1)*nxd+ic+1; get_vector(input_grid+itile, n3, v3);
+
+        interp_acc->weight[m1]  =dist2side_acc(v2, v3, v0); // ic,   jc    weight
+        interp_acc->weight[m1+1]=dist2side_acc(v1, v3, v0); // ic,   jc+1  weight
+        interp_acc->weight[m1+2]=dist2side_acc(v1, v2, v0); // ic+1, jc+1  weight
+        interp_acc->weight[m1+3]=0.;                        // ic+1, jc    weight
+        sum=interp_acc->weight[m1] + interp_acc->weight[m1+1] + interp_acc->weight[m1+2] + interp_acc->weight[m1+3];
+        interp_acc->weight[m1]  /=sum;
+        interp_acc->weight[m1+1]/=sum;
+        interp_acc->weight[m1+2]/=sum;
+        interp_acc->weight[m1+3]/=sum;
+        continue;
+      }
+
+      // calculate weights for bilinear interpolation if no corner
+      n1 = jc*nxd+ic;       get_vector(input_grid+itile, n1, v1);
+      n2 = jc*nxd+ic+1;     get_vector(input_grid+itile, n2, v2);
+      n3 = (jc+1)*nxd+ic;   get_vector(input_grid+itile, n3, v3);
+      n4 = (jc+1)*nxd+ic+1; get_vector(input_grid+itile, n4, v4);
+
+      dist1=dist2side_acc(v1, v3, v0);
+      dist2=dist2side_acc(v3, v4, v0);
+      dist3=dist2side_acc(v4, v2, v0);
+      dist4=dist2side_acc(v2, v1, v0);
+
+      interp_acc->weight[m1]  =dist2*dist3; // ic,   jc    weight
+      interp_acc->weight[m1+1]=dist3*dist4; // ic,   jc+1  weight
+      interp_acc->weight[m1+2]=dist4*dist1; // ic+1, jc+1  weight
+      interp_acc->weight[m1+3]=dist1*dist2; // ic+1, jc    weight
+
+      sum=interp_acc->weight[m1] + interp_acc->weight[m1+1] + interp_acc->weight[m1+2] + interp_acc->weight[m1+3];
+      interp_acc->weight[m1]  /=sum;
+      interp_acc->weight[m1+1]/=sum;
+      interp_acc->weight[m1+2]/=sum;
+      interp_acc->weight[m1+3]/=sum;
+    }
+  }
 
 }
 
@@ -1273,5 +1221,61 @@ void get_vector(const Grid_config *grid, const int icell, double *vector)
   vector[0] = grid->xt[icell];
   vector[1] = grid->yt[icell];
   vector[2] = grid->zt[icell];
+
+}
+
+void write_bilinear_remap_file(const int nlon_output_cells, const int nlat_output_cells, Interp_config_acc *interp_acc)
+{
+
+  int dims[3];
+  int fid = mpp_open( interp_acc->remap_file, MPP_WRITE);
+  int dim_nlon = mpp_def_dim(fid, "nlon", nlon_output_cells);
+  int dim_nlat = mpp_def_dim(fid, "nlat", nlat_output_cells);
+  int dim_three = mpp_def_dim(fid, "three", 3);
+  int dim_four  = mpp_def_dim(fid, "four", 4);
+
+  dims[0] = dim_three; dims[1] = dim_nlat; dims[2] = dim_nlon;
+  int fld_index = mpp_def_var(fid, "index", NC_INT, 3, dims, 0);
+
+  dims[0] = dim_four; dims[1] = dim_nlat; dims[2] = dim_nlon;
+  int fld_weight = mpp_def_var(fid, "weight", NC_DOUBLE, 3, dims, 0);
+
+  mpp_end_def(fid);
+
+  mpp_put_var_value(fid, fld_index, interp_acc->index);
+  mpp_put_var_value(fid, fld_weight, interp_acc->weight);
+  mpp_close(fid);
+
+}
+
+void write_bilinear_interp_in_not_zhi_format(const int ncells, Interp_config_acc *interp_acc)
+{
+
+  int fid = mpp_open( "test_remap.nc", MPP_WRITE);
+  int dim_ncells = mpp_def_dim(fid, "ncells", ncells);
+  int fld_index1 = mpp_def_var(fid, "i_index", NC_INT, 1, &dim_ncells, 0);
+  int fld_index2 = mpp_def_var(fid, "j_index", NC_INT, 1, &dim_ncells, 0);
+  int fld_index3 = mpp_def_var(fid, "tile_index", NC_INT, 1, &dim_ncells, 0);
+
+  mpp_end_def(fid);
+
+  int *array1 ; array1 = (int *)malloc(ncells*sizeof(int));
+  int *array2 ; array2 = (int *)malloc(ncells*sizeof(int));
+  int *array3 ; array3 = (int *)malloc(ncells*sizeof(int));
+
+  for(int i=0 ; i<ncells ; i++) {
+    array1[i] = interp_acc->index[3*i];
+    array2[i] = interp_acc->index[3*i+1];
+    array3[i] = interp_acc->index[3*i+2];
+  }
+
+  mpp_put_var_value(fid, fld_index1, array1);
+  mpp_put_var_value(fid, fld_index2, array2);
+  mpp_put_var_value(fid, fld_index3, array3);
+  mpp_close(fid);
+
+  free(array1);
+  free(array2);
+  free(array3);
 
 }
