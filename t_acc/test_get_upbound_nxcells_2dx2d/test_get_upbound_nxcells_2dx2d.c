@@ -322,8 +322,8 @@ int run_tests(Grid_config *input_grid, Grid_config *output_grid, Grid_cells_stru
   double *input_grid_mask;
 
   //copy grid to device
-  copy_grid_to_device_acc(ngridpts_input, input_grid->latc, input_grid->lonc);
-  copy_grid_to_device_acc(ngridpts_output, output_grid->latc, output_grid->lonc);
+  copy_latlon_grid_to_device_acc(ngridpts_input, input_grid->latc, input_grid->lonc);
+  copy_latlon_grid_to_device_acc(ngridpts_output, output_grid->latc, output_grid->lonc);
 
   //get mask to skip input cells in creating xgrid
   get_input_grid_mask_acc(ncells_input, &input_grid_mask);

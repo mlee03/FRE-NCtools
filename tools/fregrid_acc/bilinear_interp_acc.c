@@ -52,6 +52,7 @@ int get_closest_index_acc(const Grid_config *input_grid, const Grid_config *outp
 int get_interp_index_wrong(const int input_ntiles, const int iter, const Grid_config *input_grid,
                            const Grid_config *output_grid, const double dlon_in, const double dlat_in,
                            const double lonbegin, const double latbegin, int *found, Interp_config_acc *interp_acc);
+void read_remap_file(Grid_config *output_grid, const Interp_config_acc *interp_acc);
 int get_interp_index_test( const int input_ntiles, const int iter, const Grid_config *input_grid,
                            const Grid_config *output_grid, const double dlon_in, const double dlat_in,
                            const double lonbegin, const double latbegin, Interp_config_acc *interp_acc);
@@ -117,30 +118,7 @@ void setup_bilinear_interp_acc(int input_ntiles, const Grid_config *input_grid,
 
   // read from file
   if( (opcode & READ) && interp_acc->file_exist ) {
-
-    // check the size of the grid matching the size in remapping file
-    printf("NOTE: reading index and weight for bilinear interpolation from file.\n");
-
-    int fid = mpp_open(interp_acc->remap_file, MPP_READ);
-    int nx2 = mpp_get_dimlen(fid, "nlon");
-    int ny2 = mpp_get_dimlen(fid, "nlat");
-
-    printf("grid size is nx=%d, ny=%d, remap file size is nx=%d, ny=%d.\n",
-           nlon_output_cells, nlat_output_cells, nx2, ny2);
-    if(nx2 != nlon_output_cells || ny2 != nlat_output_cells )
-      mpp_error("bilinear_interp: size mismatch between grid size and remap file size");
-
-    int vid = mpp_get_varid(fid, "index");
-    mpp_get_var_value(fid, vid, interp_acc->index);
-
-    vid = mpp_get_varid(fid, "weight");
-    mpp_get_var_value(fid, vid, interp_acc->weight);
-
-    mpp_close(fid);
-
-#pragma acc enter data copyin(interp_acc[:1])
-#pragma acc enter data copyin(interp_acc->index[:3*nlon_output_cells*nlat_output_cells], \
-                              interp_acc->weight[:4*nlon_output_cells*nlat_output_cells])
+    read_remap_file(output_grid, interp_acc);
     return;
   }
 
@@ -1078,6 +1056,39 @@ int get_interp_index_wrong( const int input_ntiles, const int iter, const Grid_c
   return total_found;
 
 }
+
+
+void read_remap_file(Grid_config *output_grid, const Interp_config_acc *interp_acc)
+{
+  // check the size of the grid matching the size in remapping file
+  printf("NOTE: reading index and weight for bilinear interpolation from file.\n");
+
+  int nlon_output_cells = output_grid->nx_fine;
+  int nlat_output_cells = output_grid->ny_fine;
+
+  int fid = mpp_open(interp_acc->remap_file, MPP_READ);
+  int nx2 = mpp_get_dimlen(fid, "nlon");
+  int ny2 = mpp_get_dimlen(fid, "nlat");
+
+  printf("grid size is nx=%d, ny=%d, remap file size is nx=%d, ny=%d.\n",
+         nlon_output_cells, nlat_output_cells, nx2, ny2);
+  if(nx2 != nlon_output_cells || ny2 != nlat_output_cells )
+    mpp_error("bilinear_interp: size mismatch between grid size and remap file size");
+
+  int vid = mpp_get_varid(fid, "index");
+  mpp_get_var_value(fid, vid, interp_acc->index);
+
+  vid = mpp_get_varid(fid, "weight");
+  mpp_get_var_value(fid, vid, interp_acc->weight);
+
+  mpp_close(fid);
+
+#pragma acc enter data copyin(interp_acc[:1])
+#pragma acc enter data copyin(interp_acc->index[:3*nlon_output_cells*nlat_output_cells], \
+                              interp_acc->weight[:4*nlon_output_cells*nlat_output_cells])
+
+}
+
 
 int get_interp_index_test( const int input_ntiles, const int iter, const Grid_config *input_grid,
                            const Grid_config *output_grid, const double dlon_in, const double dlat_in,

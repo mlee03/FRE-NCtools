@@ -152,8 +152,8 @@ int run_tests(Grid_config *input_grid, Grid_config *output_grid, Interp_per_inpu
   Grid_cells_struct_config output_grid_cells;
 
   //copy grid to device
-  copy_grid_to_device_acc(ngridpts_input, input_grid->latc, input_grid->lonc);
-  copy_grid_to_device_acc(ngridpts_output, output_grid->latc, output_grid->lonc);
+  copy_latlon_grid_to_device_acc(ngridpts_input, input_grid->latc, input_grid->lonc);
+  copy_latlon_grid_to_device_acc(ngridpts_output, output_grid->latc, output_grid->lonc);
 
   //get mask to skip input cells in creating interp
   get_input_grid_mask_acc(ncells_input, &input_grid_mask);

@@ -22,9 +22,9 @@
 
 #include "globals_acc.h"
 
-void copy_grid_to_device_acc( const int npoints, const double *lat, const double *lon );
+void copy_latlon_grid_to_device_acc( const int npoints, const double *lat, const double *lon );
 
-void delete_grid_from_device_acc( const int npoints, const double *lat, const double *lon );
+void delete_latlon_grid_from_device_acc( const int npoints, const double *lat, const double *lon );
 
 void copy_interp_to_device_acc( const int ntiles_in, const int ntiles_out, const Interp_config_acc *interp_acc,
                                 const unsigned int opcode );

@@ -58,7 +58,7 @@ void setup_conserve_interp_acc(int ntiles_input_grid, Grid_config *input_grid, i
 
     interp_acc[otile].nxcells = 0;
 
-    copy_grid_to_device_acc(ngridpts_output_grid, output_grid[otile].latc, output_grid[otile].lonc);
+    copy_latlon_grid_to_device_acc(ngridpts_output_grid, output_grid[otile].latc, output_grid[otile].lonc);
 
     get_grid_cell_struct_acc( nlon_output_cells, nlat_output_cells, output_grid+otile, &output_grid_cells );
 
@@ -72,7 +72,7 @@ void setup_conserve_interp_acc(int ntiles_input_grid, Grid_config *input_grid, i
       int *approx_nxcells_per_ij1=NULL, *ij2_start=NULL, *ij2_end=NULL;
       double *input_grid_mask=NULL;
 
-      copy_grid_to_device_acc(ngridpts_input_grid, input_grid[itile].latc, input_grid[itile].lonc);
+      copy_latlon_grid_to_device_acc(ngridpts_input_grid, input_grid[itile].latc, input_grid[itile].lonc);
 
       get_input_grid_mask_acc(ncells_input_grid, &input_grid_mask);
 
@@ -128,12 +128,12 @@ void setup_conserve_interp_acc(int ntiles_input_grid, Grid_config *input_grid, i
 
       free_upbound_nxcells_arrays_acc(ncells_input_grid, &approx_nxcells_per_ij1, &ij2_start, &ij2_end);
       free_input_grid_mask_acc(ncells_input_grid, &input_grid_mask);
-      delete_grid_from_device_acc(ngridpts_input_grid, input_grid[itile].lonc, input_grid[itile].latc);
+      delete_latlon_grid_from_device_acc(ngridpts_input_grid, input_grid[itile].lonc, input_grid[itile].latc);
 
     } //input tile
 
     free_grid_cell_struct_acc( ncells_output_grid, &output_grid_cells);
-    delete_grid_from_device_acc(ngridpts_output_grid, output_grid[otile].lonc, output_grid[otile].latc);
+    delete_latlon_grid_from_device_acc(ngridpts_output_grid, output_grid[otile].lonc, output_grid[otile].latc);
 
   }//output tile
 

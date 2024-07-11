@@ -79,7 +79,7 @@ int main(){
   }
 
   // copy grid to device
-  copy_grid_to_device_acc((NLON+1)*(NLAT+1), grid.latc, grid.lonc);
+  copy_latlon_grid_to_device_acc((NLON+1)*(NLAT+1), grid.latc, grid.lonc);
 
   // get grid_cells
   get_grid_cell_struct_acc( NLON, NLAT, &grid, &grid_cells);

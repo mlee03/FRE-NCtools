@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <openacc.h>
+#include <stdarg.h>
 #include "globals_acc.h"
 #include "general_utils_acc.h"
 
@@ -27,14 +28,14 @@
 void copy_grid_to_device( const int itile, Grid_config *grid )
 Copies lat lon coordinates to device
 *******************************************************************************/
-void copy_grid_to_device_acc( const int npoints, const double *lat, const double *lon )
+void copy_latlon_grid_to_device_acc( const int npoints, const double *lat, const double *lon )
 {
 
 #pragma acc enter data copyin(lon[:npoints], lat[:npoints])
 
 }
 
-void delete_grid_from_device_acc( const int npoints, const double *lat, const double *lon )
+void delete_latlon_grid_from_device_acc( const int npoints, const double *lat, const double *lon )
 {
 
 #pragma acc exit data delete(lat[:npoints], lon[:npoints])
