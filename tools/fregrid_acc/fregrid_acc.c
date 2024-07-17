@@ -703,6 +703,7 @@ int main(int argc, char* argv[])
     print_mem_usage("After calling get_input_grid");
     time_start = clock();
   }
+
   if(mosaic_out)
     get_output_grid_from_mosaic( ntiles_out, grid_out, mosaic_out, opcode, &great_circle_algorithm_out );
   else {

@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
 #include <openacc.h>
 #include "globals_acc.h"
 #include "general_utils_acc.h"
@@ -50,10 +51,9 @@ int get_index_acc(const Grid_config *input_grid, const Grid_config *output_grid,
 #pragma acc routine seq
 int get_closest_index_acc(const Grid_config *input_grid, const Grid_config *output_grid, int *index,
                           int i_in, int j_in, int l_in, int i_out, int j_out);
-int get_interp_index_wrong(const int input_ntiles, const int iter, const Grid_config *input_grid,
-                           const Grid_config *output_grid, const double dlon_in, const double dlat_in,
-                           const double lonbegin, const double latbegin, int *found, Interp_config_acc *interp_acc);
+
 void read_remap_file(const Grid_config *output_grid, const Interp_config_acc *interp_acc);
+
 void get_interp_index_test( const int input_ntiles, const int iter, const Grid_config *input_grid,
                             const Grid_config *output_grid, const double dlon_in, const double dlat_in,
                             const double lonbegin, const double latbegin, Interp_config_acc *interp_acc);
@@ -129,7 +129,6 @@ void setup_bilinear_interp_acc(int input_ntiles, const Grid_config *input_grid,
   //find lower left corner on cubed sphere for given latlon location
   get_interp_index_test(input_ntiles, max_iter, input_grid, output_grid, dlon_in, dlat_in, lonbegin, latbegin, interp_acc);
 
-
   // calculate weights for interpolation
   get_interp_weights(input_ntiles, output_ntiles, output_grid, input_grid, interp_acc);
 
@@ -139,11 +138,10 @@ void setup_bilinear_interp_acc(int input_ntiles, const Grid_config *input_grid,
 
   /* write out weight information if needed */
   if( opcode & WRITE ) write_bilinear_remap_file(nlon_output_cells, nlat_output_cells, interp_acc);
-
+  write_bilinear_interp_in_not_zhi_format(ncells_output, interp_acc);
 
   delete_bilinear_grid_from_device_acc(output_ntiles, ncells_output, output_grid);
   delete_bilinear_grid_from_device_acc(input_ntiles, nxd*nyd, input_grid);
-
 
   printf("\n done calculating interp_index and interp_weight\n");
 
@@ -158,20 +156,16 @@ void do_scalar_bilinear_interp_acc(const Interp_config_acc *interp_acc, int vid,
                                    const Field_config *field_in, Field_config *field_out, int finer_step,
                                    int fill_missing)
 {
-  double *data_fine;
 
-  /*------------------------------------------------------------------
-    determine target grid resolution
-    ------------------------------------------------------------------*/
   int nlon_output_cells = output_grid->nx_fine;
   int nlat_output_cells = output_grid->ny_fine;
   int nlon_input_cells  = input_grid->nx;
   int nlat_input_cells  = input_grid->ny;
-  /* currently we are regridding one vertical level for each call to reduce the memory usage */
-  double missing     = field_in[0].var[vid].missing;
+  // currently we are regridding one vertical level for each call to reduce the memory usage
+  double missing  = field_in[0].var[vid].missing;
   int has_missing = field_in[0].var[vid].has_missing;
 
-  data_fine = (double *)malloc(nlon_output_cells*nlat_output_cells*sizeof(double));
+  double *data_fine;  data_fine = (double *)malloc(nlon_output_cells*nlat_output_cells*sizeof(double));
 
 #pragma acc enter data create(data_fine[:nlon_output_cells*nlat_output_cells])
 #pragma acc enter data copyin(field_in[:input_ntiles])
@@ -179,8 +173,10 @@ void do_scalar_bilinear_interp_acc(const Interp_config_acc *interp_acc, int vid,
 #pragma acc enter data copyin(field_in[itile].data[:(nlon_input_cells+2)*(nlat_input_cells+2)])
   }
 
+
   do_c2l_interp_acc(interp_acc, nlon_input_cells, nlat_input_cells, input_ntiles, field_in, nlon_output_cells,
                     nlat_output_cells, data_fine, has_missing, missing, fill_missing);
+
 
 #pragma acc exit data copyout(data_fine[:nlon_output_cells*nlat_output_cells])
   for(int itile=0 ; itile<input_ntiles ; itile++) {
@@ -219,44 +215,64 @@ void do_c2l_interp_acc(const Interp_config_acc *interp_acc, int nlon_input_cells
 {
   int ind;
   int nxd = nlon_input_cells + 2;
+  int ncells_output = nlon_output_cells * nlat_output_cells;
 
   if (has_missing) {
-#pragma acc data present(interp_acc[:1], field_in[:input_ntiles], data_out[:nlon_output_cells*nlat_output_cells])
-#pragma acc parallel loop
-    for(int ij=0; ij<nlat_output_cells*nlon_output_cells; ij++) {
-      int ic = interp_acc->index[3*ij];
-      int jc = interp_acc->index[3*ij+1];
-      int tile = interp_acc->index[3*ij+2];
-      double d_in[4] = {field_in[tile].data[jc*nxd+ic],
-                        field_in[tile].data[(jc+1)*nxd+ic],
-                        field_in[tile].data[(jc+1)*nxd+ic+1],
-                        field_in[tile].data[jc*nxd+ic+1]};
-      if (d_in[0] == missing || d_in[1] == missing || d_in[2] == missing || d_in[3] == missing ) {
-        if (fill_missing) {
-          ind = max_weight_index_acc( &(interp_acc->weight[4*ij]), 4);
-          data_out[ij] = d_in[ind];
+    if(fill_missing) {
+#pragma acc parallel loop present(interp_acc[:1], field_in[:input_ntiles], data_out[:ncells_output])
+      for(int n2=0; n2<ncells_output; n2++) {
+        int ic = interp_acc->index[3*n2];
+        int jc = interp_acc->index[3*n2+1];
+        int tile = interp_acc->index[3*n2+2];
+        double d_in[4] = {field_in[tile].data[jc*nxd+ic],
+                          field_in[tile].data[(jc+1)*nxd+ic],
+                          field_in[tile].data[(jc+1)*nxd+ic+1],
+                          field_in[tile].data[jc*nxd+ic+1]};
+        if (d_in[0] == missing || d_in[1] == missing || d_in[2] == missing || d_in[3] == missing ) {
+          ind = max_weight_index_acc(interp_acc->weight+4*n2, 4);
+          data_out[n2] = d_in[ind];
+          continue;
         }
-        else data_out[ij] = missing;
+        data_out[n2] = d_in[0]*interp_acc->weight[4*n2] + d_in[1]*interp_acc->weight[4*n2+1] +
+                       d_in[2]*interp_acc->weight[4*n2+2] + d_in[3]*interp_acc->weight[4*n2+3];
       }
-      else data_out[ij] = d_in[0]*interp_acc->weight[4*ij] +
-             d_in[1]*interp_acc->weight[4*ij+1] + d_in[2]*interp_acc->weight[4*ij+2] + d_in[3]*interp_acc->weight[4*ij+3];
-    }
-  }
+    } // if fill_missing
+
+    else {
+#pragma acc parallel loop present(interp_acc[:1], field_in[:input_ntiles], data_out[:ncells_output])
+      for(int n2=0; n2<ncells_output; n2++) {
+        int ic = interp_acc->index[3*n2];
+        int jc = interp_acc->index[3*n2+1];
+        int tile = interp_acc->index[3*n2+2];
+        double d_in[4] = {field_in[tile].data[jc*nxd+ic],
+                          field_in[tile].data[(jc+1)*nxd+ic],
+                          field_in[tile].data[(jc+1)*nxd+ic+1],
+                          field_in[tile].data[jc*nxd+ic+1]};
+        if (d_in[0] == missing || d_in[1] == missing || d_in[2] == missing || d_in[3] == missing ) {
+          data_out[n2] = missing;
+          continue;
+        }
+        data_out[n2] = d_in[0]*interp_acc->weight[4*n2] + d_in[1]*interp_acc->weight[4*n2+1] +
+                       d_in[2]*interp_acc->weight[4*n2+2] + d_in[3]*interp_acc->weight[4*n2+3];
+      }
+    } //if not fill_missing
+
+  } // if missing
+
   else {
-#pragma acc data present(interp_acc[:1], field_in[:input_ntiles], data_out[:nlon_output_cells*nlat_output_cells])
-#pragma acc parallel loop
-    for(int ij=0; ij<nlat_output_cells*nlon_output_cells; ij++) {
-      int ic = interp_acc->index[3*ij];
-      int jc = interp_acc->index[3*ij+1];
-      int tile = interp_acc->index[3*ij+2];
+#pragma acc parallel loop present(interp_acc[:1], field_in[:input_ntiles], data_out[:ncells_output])
+    for(int n2=0; n2<ncells_output; n2++) {
+      int ic = interp_acc->index[3*n2];
+      int jc = interp_acc->index[3*n2+1];
+      int tile = interp_acc->index[3*n2+2];
       double d_in[4] = {field_in[tile].data[jc*nxd+ic],
                         field_in[tile].data[(jc+1)*nxd+ic],
                         field_in[tile].data[(jc+1)*nxd+ic+1],
                         field_in[tile].data[jc*nxd+ic+1]};
-      data_out[ij] = d_in[0]*interp_acc->weight[4*ij] +
-        d_in[1]*interp_acc->weight[4*ij+1] + d_in[2]*interp_acc->weight[4*ij+2] + d_in[3]*interp_acc->weight[4*ij+3];
+      data_out[n2] = d_in[0]*interp_acc->weight[4*n2] + d_in[1]*interp_acc->weight[4*n2+1] +
+                     d_in[2]*interp_acc->weight[4*n2+2] + d_in[3]*interp_acc->weight[4*n2+3];
     }
-  }
+  } // if not missing
 
 }; /* do_c2l_interp_acc */
 
@@ -353,9 +369,9 @@ int get_index_acc(const Grid_config *input_grid, const Grid_config *output_grid,
   void get_closest_index_acc(int ig, int jg, int lg, int ok)
   --------------------------------------------------------------*/
 int get_closest_index_acc(const Grid_config *input_grid, const Grid_config *output_grid, int *index,
-		      int i_in, int j_in, int l_in, int i_out, int j_out)
+                          int i_in, int j_in, int l_in, int i_out, int j_out)
 {
-  int found;
+
   double angle_11, angle_11a, angle_11b;
   double angle_22, angle_22a, angle_22b;
   double angle_33, angle_33a, angle_33b;
@@ -364,46 +380,38 @@ int get_closest_index_acc(const Grid_config *input_grid, const Grid_config *outp
   double angle_2,  angle_2a,  angle_2b;
   double angle_3,  angle_3a,  angle_3b;
   double angle_4,  angle_4a,  angle_4b;
-  int    n0, n1, n2, n3, n4, n5, n6, n7, n8;
-  int    nlon_input_cells, nlat_input_cells, nlon_output_cells, nlat_output_cells, nxd;
+  int n4, n5, n6, n7, n8;
   double v0[3], v1[3], v2[3], v3[3], v4[3], v5[3], v6[3], v7[3], v8[3];
 
-  found = 0;
-  nlon_input_cells  = input_grid->nx;
-  nlat_input_cells  = input_grid->ny;
-  nxd    = nlon_input_cells + 2;
-  nlon_output_cells = output_grid->nx_fine;
-  nlat_output_cells = output_grid->ny_fine;
-  n0     = j_out*nlon_output_cells+i_out;
-  n1     = j_in*nxd+i_in;
-  n2     = j_in*nxd+i_in+1;
-  n3     = (j_in+1)*nxd+i_in;
-  v1[0]  = input_grid->xt[n1];
-  v1[1]  = input_grid->yt[n1];
-  v1[2]  = input_grid->zt[n1];
-  v2[0]  = input_grid->xt[n2];
-  v2[1]  = input_grid->yt[n2];
-  v2[2]  = input_grid->zt[n2];
-  v3[0]  = input_grid->xt[n3];
-  v3[1]  = input_grid->yt[n3];
-  v3[2]  = input_grid->zt[n3];
-  v0[0]  = output_grid->xt[n0];
-  v0[1]  = output_grid->yt[n0];
-  v0[2]  = output_grid->zt[n0];
+  int found = 0;
+  int nx_in  = input_grid->nx;
+  int ny_in  = input_grid->ny;
+  int nxd    = nx_in + 2;
+  int nx_out = output_grid->nx_fine;
+  int ny_out = output_grid->ny_fine;
+  int n0     = j_out*nx_out+i_out;
+  int n1     = j_in*nxd+i_in;
+  int n2     = j_in*nxd+i_in+1;
+  int n3     = (j_in+1)*nxd+i_in;
+
+  get_vector(input_grid, n1, v1);
+  get_vector(input_grid, n2, v2);
+  get_vector(input_grid, n3, v3);
+  get_vector(output_grid, n0, v0);
+
   angle_1 =spherical_angle_acc(v1, v2, v3);
   angle_1a=spherical_angle_acc(v1, v2, v0);
   angle_1b=spherical_angle_acc(v1, v3, v0);
+
   if (max(angle_1a,angle_1b) <= angle_1) {
-    if (i_in==nlon_input_cells && j_in==nlat_input_cells) {
+    if (i_in==nx_in && j_in==ny_in) {
       angle_11 =spherical_angle_acc(v2, v3, v1);
       angle_11a=spherical_angle_acc(v2, v1, v0);
       angle_11b=spherical_angle_acc(v2, v3, v0);
     }
     else {
       n4 = (j_in+1)*nxd+i_in+1;
-      v4[0]  = input_grid->xt[n4];
-      v4[1]  = input_grid->yt[n4];
-      v4[2]  = input_grid->zt[n4];
+      get_vector(input_grid, n4, v4);
       angle_11 =spherical_angle_acc(v4, v3, v2);
       angle_11a=spherical_angle_acc(v4, v2, v0);
       angle_11b=spherical_angle_acc(v4, v3, v0);
@@ -415,29 +423,24 @@ int get_closest_index_acc(const Grid_config *input_grid, const Grid_config *outp
       index[2]=l_in;
     }
   }
+
   else {
     n4 = j_in*nxd+i_in-1;
-    v4[0]  = input_grid->xt[n4];
-    v4[1]  = input_grid->yt[n4];
-    v4[2]  = input_grid->zt[n4];
+    get_vector(input_grid, n4, v4);
     angle_2 =spherical_angle_acc(v1,v3,v4);
     angle_2a=angle_1b;
     angle_2b=spherical_angle_acc(v1,v4,v0);
     if (max(angle_2a,angle_2b)<=angle_2) {
-      if (i_in==1 && j_in==nlat_input_cells) {
+      if (i_in==1 && j_in==ny_in) {
         angle_22 =spherical_angle_acc(v3, v1, v4);
         angle_22a=spherical_angle_acc(v3, v4, v0);
         angle_22b=spherical_angle_acc(v3, v1, v0);
       }
       else {
         n5 = (j_in+1)*nxd+i_in-1;
-        n6 = j_in*nxd+i_in-1;
-        v5[0]  = input_grid->xt[n5];
-        v5[1]  = input_grid->yt[n5];
-        v5[2]  = input_grid->zt[n5];
-        v6[0]  = input_grid->xt[n6];
-        v6[1]  = input_grid->yt[n6];
-        v6[2]  = input_grid->zt[n6];
+        n6 = j_in    *nxd+i_in-1;
+        get_vector(input_grid, n5, v5);
+        get_vector(input_grid, n6, v6);
         angle_22 =spherical_angle_acc(v5, v3, v6);
         angle_22a=spherical_angle_acc(v5, v6, v0);
         angle_22b=spherical_angle_acc(v5, v3, v0);
@@ -452,20 +455,14 @@ int get_closest_index_acc(const Grid_config *input_grid, const Grid_config *outp
     else {
       n5 = j_in*nxd+i_in-1;
       n6 = (j_in-1)*nxd+i_in;
-      v5[0]  = input_grid->xt[n5];
-      v5[1]  = input_grid->yt[n5];
-      v5[2]  = input_grid->zt[n5];
-      v6[0]  = input_grid->xt[n6];
-      v6[1]  = input_grid->yt[n6];
-      v6[2]  = input_grid->zt[n6];
+      get_vector(input_grid, n5, v5);
+      get_vector(input_grid, n6, v6);
       angle_3 =spherical_angle_acc(v1, v5, v6);
       angle_3a=angle_2b;
       angle_3b=spherical_angle_acc(v1, v6, v0);
       if (max(angle_3a,angle_3b)<=angle_3 && i_in>1 && j_in>1) {
         n7 = (j_in-1)*nxd+i_in-1;
-        v7[0]  = input_grid->xt[n7];
-        v7[1]  = input_grid->yt[n7];
-        v7[2]  = input_grid->zt[n7];
+        get_vector(input_grid, n7, v7);
         angle_33 =spherical_angle_acc(v7, v6, v5);
         angle_33a=spherical_angle_acc(v7, v5, v0);
         angle_33b=spherical_angle_acc(v7, v6, v0);
@@ -481,16 +478,14 @@ int get_closest_index_acc(const Grid_config *input_grid, const Grid_config *outp
         angle_4a=angle_3b;
         angle_4b=spherical_angle_acc(v1, v2, v0);
         if (max(angle_4a,angle_4b)<=angle_4) {
-          if (i_in==nlon_input_cells && j_in==1) {
+          if (i_in==nx_in && j_in==1) {
             angle_44 =spherical_angle_acc(v2, v1, v6);
             angle_44a=spherical_angle_acc(v2, v6, v0);
             angle_44b=spherical_angle_acc(v2, v1, v0);
           }
           else {
             n8 = (j_in-1)*nxd+i_in+1;
-            v8[0]  = input_grid->xt[n8];
-            v8[1]  = input_grid->yt[n8];
-            v8[2]  = input_grid->zt[n8];
+            get_vector(input_grid, n8, v8);
             angle_44 =spherical_angle_acc(v8, v2, v6);
             angle_44a=spherical_angle_acc(v8, v6, v0);
             angle_44b=spherical_angle_acc(v8, v2, v0);
@@ -505,10 +500,11 @@ int get_closest_index_acc(const Grid_config *input_grid, const Grid_config *outp
       }
     }
   }
+
   return found;
 
-}; /* get_closest_index_acc */
 
+}; /* get_closest_index_acc */
 
 
 /*--------------------------------------------------------------------------
@@ -738,146 +734,6 @@ void redu2x_acc(const double *varfin, const double *yfin, int nxfin, int nyfin, 
 
 }; /*redu2x_acc*/
 
-int get_interp_index_wrong( const int input_ntiles, const int iter, const Grid_config *input_grid,
-                            const Grid_config *output_grid, const double dlon_in, const double dlat_in,
-                            const double lonbegin, const double latbegin, int *found, Interp_config_acc *interp_acc)
-{
-
-  int nlon_input_cells = input_grid->nx;
-  int nlat_input_cells = input_grid->ny;
-  int nlon_output_cells = output_grid->nx_fine;
-  int nlat_output_cells = output_grid->ny_fine;
-  int ncells_output = nlon_output_cells * nlat_output_cells;
-  int ncells_input = nlon_input_cells * nlat_input_cells;
-  int nxd = nlon_input_cells + 2;
-  int nyd = nlat_input_cells + 2;
-
-  double dlon = dlon_in/nlon_output_cells;
-  double dlat = dlat_in/(nlat_output_cells-1);
-
-  int total_found = 0;
-
-  for(int itile=0; itile<input_ntiles; itile++) {
-
-#pragma acc data present(output_grid[:1],          \
-                         output_grid->xt[:nlon_output_cells*nlat_output_cells], \
-                         output_grid->yt[:nlon_output_cells*nlat_output_cells], \
-                         output_grid->zt[:nlon_output_cells*nlat_output_cells], \
-                         input_grid[:input_ntiles],                     \
-                         input_grid[itile].xt[:nxd*nyd],                \
-                         input_grid[itile].yt[:nxd*nyd],                \
-                         input_grid[itile].zt[:nxd*nyd],                \
-                         found[:ncells_output])
-#pragma acc data present(interp_acc[:1], interp_acc->index[:3*ncells_output], interp_acc->weight[:4*ncells_output])
-#pragma acc enter data copyin(input_grid[itile].latt[:nxd*nyd], input_grid[itile].lont[:nxd*nyd])
-#pragma acc parallel loop collapse(2)
-    for(int jc=1; jc<=nlat_input_cells; jc++) {
-      for(int ic=1; ic<=nlon_input_cells; ic++) {
-        /*------------------------------------------------------
-          guess bounding latlon output cells for given input cubed sphere cell
-          ------------------------------------------------------*/
-        int n1 = jc*nxd+ic;
-        int n2 = (jc+1)*nxd+ic+1;
-        int outgrid_j_min, outgrid_j_max;
-        int outgrid_i_min, outgrid_i_max;
-        double dcub, distance;
-        double input_latt = input_grid[itile].latt[n1] - latbegin;
-        double input_lont = input_grid[itile].lont[n1] - lonbegin;
-        double v1[3], v2[3], index[3];
-
-        get_vector(input_grid+itile, n1, v1);
-        get_vector(input_grid+itile, n2, v2);
-        dcub=iter*normalize_great_circle_distance_acc(v1, v2);
-
-        // get approximate output grid indices in the vicinity
-        outgrid_j_min=max(   1,  floor((input_latt-dcub)/dlat)-iter+1);
-        outgrid_j_max=min(nlat_output_cells, ceil((input_latt+dcub)/dlat)+iter-1);
-
-        if (outgrid_j_min==1 ){
-          outgrid_i_min=1;
-          outgrid_i_max=nlon_output_cells;
-        }
-        else if(outgrid_j_max==nlat_output_cells) {
-          outgrid_i_min=1;
-          outgrid_i_max=nlon_output_cells;
-        }
-        else {
-          outgrid_i_min=max(   1,  floor((input_lont-dcub)/dlon-iter+1));
-          outgrid_i_max=min(nlon_output_cells,ceil((input_lont+dcub)/dlon+iter-1));
-        }
-
-#pragma acc loop collapse(2)
-        for(int jout=outgrid_j_min-1; jout<outgrid_j_max; jout++) {
-          for(int iout=outgrid_i_min-1; iout<outgrid_i_max; iout++) {
-            int n0 = jout*nlon_output_cells + iout;
-            int next_jcc = min(nlat_input_cells, jc+1);
-            int next_icc = min(nlon_input_cells, ic+1);
-            int ifound = 0, index_out[3];
-            double shortest = M_PI+M_PI;
-            double v0[3];
-
-            if(found[n0]) continue;
-
-            get_vector(output_grid, n0, v0);
-
-            /*--------------------------------------------------------------------
-              for latlon cell find nearest cubed sphere cell
-              ------------------------------------------------------------------*/
-
-#pragma acc loop seq
-            for(int jcc=jc; jcc<=next_jcc; jcc++) {
-              for(int icc=ic; icc<=next_icc; icc++) {
-                n1 = jcc*nxd + icc;
-
-                get_vector(input_grid+itile, n1, v1);
-                distance=normalize_great_circle_distance_acc(v1, v0);
-
-                if (distance < shortest) {
-                  shortest=distance;
-                  index[0]=icc;
-                  index[1]=jcc;
-                  index[2]=itile;
-                }
-              }
-            }
-
-            /*------------------------------------------------
-              determine lower left corner
-              ------------------------------------------------*/
-            ifound = get_closest_index_acc(input_grid+itile, output_grid,
-                                           index_out, index[0], index[1], index[2], iout, jout);
-
-            if( ifound ) {
-              if( !found[n0] ) {
-#pragma acc atomic write
-                interp_acc->index[3*n0]   = index_out[0];
-#pragma acc atomic write
-                interp_acc->index[3*n0+1] = index_out[1];
-#pragma acc atomic write
-                interp_acc->index[3*n0+2] = index_out[2];
-#pragma acc atomic write
-                found[n0] = ifound;
-              }
-            }
-
-          } // output j
-        } // output i
-      } // input ic
-    } // input jc
-  } //input tile
-
-
-#pragma acc parallel loop reduction(+:total_found) copy(total_found) present(found[:nlon_output_cells*nlat_output_cells])
-  for(int i=0 ; i<nlon_output_cells*nlat_output_cells ; i++){
-    total_found = total_found + found[i];
-  }
-
-  printf("INSIDE %d\n", total_found);
-  return total_found;
-
-}
-
-
 void read_remap_file(const Grid_config *output_grid, const Interp_config_acc *interp_acc)
 {
   // check the size of the grid matching the size in remapping file
@@ -939,143 +795,162 @@ void get_interp_index_test( const int input_ntiles, const int iter, const Grid_c
   int *found=NULL; found = acc_malloc(ncells_output*sizeof(int));
   double *shortest=NULL; shortest = acc_malloc(ncells_output*sizeof(double));
 
-  for(int itile=0; itile<input_ntiles; itile++) {
+  float time[input_ntiles];
+  for(int i=0 ; i<input_ntiles ; i++) time[i] = 0.0;
 
-    int i2_start=ncells_output, i2_end=0, j2_start=ncells_output, j2_end=0;
+  for(int iiter=1 ; iiter<iter ; iiter++ ) {
 
-#pragma acc data present(input_grid[itile].xt[:nxd*nyd],  \
-                         input_grid[itile].yt[:nxd*nyd],  \
-                         input_grid[itile].zt[:nxd*nyd])
-#pragma acc data copyin(input_grid[itile].latt[:nxd*nyd], input_grid[itile].lont[:nxd*nyd])
-#pragma acc data copyout(i2_start, i2_end, j2_start, j2_end)
-#pragma acc parallel loop collapse(2) deviceptr(i2_min, i2_max, j2_min, j2_max) \
-                     reduction(min: i2_start) reduction(min: j2_start) reduction(max: i2_end) reduction(max: j2_end)
-    for(int jc=1; jc<=nlat_input_cells; jc++) {
-      for(int ic=1; ic<=nlon_input_cells; ic++) {
-        /*------------------------------------------------------
-          guess bounding latlon output cells for given input cubed sphere cell
-          ------------------------------------------------------*/
-        int n1 = jc*nxd+ic;
-        int n2 = (jc+1)*nxd+ic+1;
-
-        int outgrid_j_min, outgrid_j_max;
-        int outgrid_i_min, outgrid_i_max;
-        double dcub;
-        double input_latt = (input_grid[itile].latt[n1] - latbegin);
-        double input_lont = (input_grid[itile].lont[n1] - lonbegin);
-        double v1[3], v2[3];
-
-        get_vector(input_grid+itile, n1, v1);
-        get_vector(input_grid+itile, n2, v2);
-        dcub=iter*normalize_great_circle_distance_acc(v1, v2);
-
-        // get approximate output grid indices in the vicinity
-        outgrid_j_min=max(   1,  floor((input_latt-dcub)/dlat)-iter+1 );
-        outgrid_j_max=min(nlat_output_cells, ceil((input_latt+dcub)/dlat)+iter-1 );
-
-        outgrid_i_min=max(   1,  floor((input_lont-dcub)/dlon-iter+1));
-        outgrid_i_max=min(nlon_output_cells,ceil((input_lont+dcub)/dlon+iter-1));
-        if(outgrid_j_min==1 ) {
-          outgrid_i_min = 1;
-          outgrid_i_max = nlon_output_cells;
-        }
-        if(outgrid_j_max==nlat_output_cells ) {
-          outgrid_i_min = 1;
-          outgrid_i_max = nlon_output_cells;
-        }
-
-        i2_min[n1] = outgrid_i_min-1;
-        i2_max[n1] = outgrid_i_max;
-        j2_min[n1] = outgrid_j_min-1;
-        j2_max[n1] = outgrid_j_max;
-
-        i2_start = min(i2_start, outgrid_i_min-1);
-        j2_start = min(j2_start, outgrid_j_min-1);
-        i2_end = max(i2_end, outgrid_i_max);
-        j2_end = max(j2_end, outgrid_j_max);
-
-      } // input ic
-    } // input jc
-
-#pragma acc data copyin( i2_start, j2_start, i2_end, j2_end )
-#pragma acc parallel loop collapse(2) deviceptr(i1_min, i1_max, j1_min, j1_max, \
-                                                i2_min, i2_max, j2_min, j2_max, shortest)
-    for( int j2=j2_start ; j2<j2_end ; j2++) {
-      for(int i2=i2_start ; i2<i2_end ; i2++) {
-        int n2 = j2*nlon_output_cells + i2;
-        int i1_min_tmp = nxd ; int i1_max_tmp = -10;
-        int j1_min_tmp = nyd ; int j1_max_tmp = -10;
-        shortest[n2] = M_PI + M_PI ;
-#pragma acc loop collapse(2) reduction(min:i1_min_tmp) reduction(min:j1_min_tmp) \
-                             reduction(max:i1_max_tmp) reduction(max:j1_max_tmp)
-        for( int j1=1 ; j1<=nlat_input_cells ; j1++) {
-          for( int i1=1 ; i1<=nlon_input_cells ; i1++) {
-            int n1 = j1*nxd + i1;
-            if( j2 < j2_min[n1] ) continue;
-            if( i2 < i2_min[n1] ) continue;
-            if( j2 > j2_max[n1] ) continue;
-            if( i2 > i2_max[n1] ) continue;
-            i1_min_tmp = min(i1_min_tmp, i1);
-            i1_max_tmp = max(i1_max_tmp, i1);
-            j1_min_tmp = min(j1_min_tmp, j1);
-            j1_max_tmp = max(j1_max_tmp, j1);
-          }
-        }
-        i1_min[n2] = i1_min_tmp;
-        i1_max[n2] = i1_max_tmp;
-        j1_min[n2] = j1_min_tmp;
-        j1_max[n2] = j1_max_tmp;
-      }
+#pragma acc parallel loop deviceptr(shortest)
+    for(int i=0; i<ncells_output; i++) {
+      shortest[i] = M_PI + M_PI;
     }
 
-#pragma acc data present(input_grid[itile].xt[:nxd*nyd],   \
-                         input_grid[itile].yt[:nxd*nyd],   \
-                         input_grid[itile].zt[:nxd*nyd],   \
-                         output_grid->xt[:ncells_output],     \
-                         output_grid->yt[:ncells_output],     \
-                         output_grid->zt[:ncells_output],     \
-                         interp_acc->index[:3*ncells_output])
-#pragma acc data deviceptr(shortest, found, i1_min, j1_min, i1_max, j1_max)\
-                    copyin(i2_start, j2_start, i2_end, j2_end)
-#pragma acc parallel loop collapse(2)
-    for( int j2=j2_start ; j2<j2_end; j2++ ) {
-      for( int i2=i2_start ; i2<i2_end ; i2++ ) {
-        int n2 = j2*nlon_output_cells + i2;
-        if(found[n2]) continue;
-        int i1_start = i1_min[n2];
-        int j1_start = j1_min[n2];
-        int i1_end = i1_max[n2];
-        int j1_end = j1_max[n2];
-        double distance, v1[3], v2[3];
-        v2[0] = output_grid->xt[n2];
-        v2[1] = output_grid->yt[n2];
-        v2[2] = output_grid->zt[n2];
+    for(int itile=0; itile<input_ntiles; itile++) {
+
+      clock_t time_start, time_end;
+      time_start = clock();
+
+      int i2_start=ncells_output, i2_end=0, j2_start=ncells_output, j2_end=0;
+
+#pragma acc parallel loop collapse(2) reduction(min: i2_start) reduction(min: j2_start) \
+                                      reduction(max: i2_end) reduction(max: j2_end)     \
+                                      present(input_grid[itile].xt[:nxd*nyd], \
+                                              input_grid[itile].yt[:nxd*nyd], \
+                                              input_grid[itile].zt[:nxd*nyd]) \
+                                      copyin(input_grid[itile].latt[:nxd*nyd],\
+                                             input_grid[itile].lont[:nxd*nyd])\
+                                      copyout(i2_start, i2_end, j2_start, j2_end) \
+                                      deviceptr(i2_min, i2_max, j2_min, j2_max)
+      for(int jc=1; jc<=nlat_input_cells; jc++) {
+        for(int ic=1; ic<=nlon_input_cells; ic++) {
+          /*------------------------------------------------------
+            guess bounding latlon output cells for given input cubed sphere cell
+            ------------------------------------------------------*/
+          int n1 = jc*nxd+ic;
+          int n2 = (jc+1)*nxd+ic+1;
+
+          int outgrid_j_min, outgrid_j_max;
+          int outgrid_i_min, outgrid_i_max;
+          double input_latt = (input_grid[itile].latt[n1] - latbegin);
+          double input_lont = (input_grid[itile].lont[n1] - lonbegin);
+          double dcub, v1[3], v2[3];
+
+          get_vector(input_grid+itile, n1, v1);
+          get_vector(input_grid+itile, n2, v2);
+          dcub=iter*normalize_great_circle_distance_acc(v1, v2);
+
+          // get approximate output grid indices in the vicinity
+          outgrid_j_min=max(   1,  floor((input_latt-dcub)/dlat)-iiter+1 );
+          outgrid_j_max=min(nlat_output_cells, ceil((input_latt+dcub)/dlat)+iiter-1 );
+
+          outgrid_i_min=max(   1,  floor((input_lont-dcub)/dlon-iiter+1));
+          outgrid_i_max=min(nlon_output_cells,ceil((input_lont+dcub)/dlon+iiter-1));
+
+          if(outgrid_j_min==1 ) {
+            outgrid_i_min = 1;
+            outgrid_i_max = nlon_output_cells;
+          }
+          if(outgrid_j_max==nlat_output_cells ) {
+            outgrid_i_min = 1;
+            outgrid_i_max = nlon_output_cells;
+          }
+
+          i2_min[n1] = outgrid_i_min-1;
+          i2_max[n1] = outgrid_i_max;
+          j2_min[n1] = outgrid_j_min-1;
+          j2_max[n1] = outgrid_j_max;
+
+          i2_start = min(i2_start, outgrid_i_min-1);
+          j2_start = min(j2_start, outgrid_j_min-1);
+          i2_end = max(i2_end, outgrid_i_max);
+          j2_end = max(j2_end, outgrid_j_max);
+
+        } // input ic
+      } // input jc
+
+
+#pragma acc parallel loop collapse(2) deviceptr(i1_min, i1_max, j1_min, j1_max, \
+                                                i2_min, i2_max, j2_min, j2_max, shortest, found)\
+                                      copyin( i2_start, j2_start, i2_end, j2_end )
+      for( int j2=j2_start ; j2<j2_end ; j2++) {
+        for(int i2=i2_start ; i2<i2_end ; i2++) {
+          int n2 = j2*nlon_output_cells + i2;
+          int i1_min_tmp = nxd ; int i1_max_tmp = -10;
+          int j1_min_tmp = nyd ; int j1_max_tmp = -10;
+#pragma acc loop collapse(2) reduction(min:i1_min_tmp) reduction(min:j1_min_tmp) \
+                             reduction(max:i1_max_tmp) reduction(max:j1_max_tmp)
+          for( int j1=1 ; j1<=nlat_input_cells ; j1++) {
+            for( int i1=1 ; i1<=nlon_input_cells ; i1++) {
+              int n1 = j1*nxd + i1;
+              if( j2 < j2_min[n1] ) continue;
+              if( i2 < i2_min[n1] ) continue;
+              if( j2 > j2_max[n1] ) continue;
+              if( i2 > i2_max[n1] ) continue;
+              i1_min_tmp = min(i1_min_tmp, i1);
+              i1_max_tmp = max(i1_max_tmp, i1);
+              j1_min_tmp = min(j1_min_tmp, j1);
+              j1_max_tmp = max(j1_max_tmp, j1);
+            }
+          }
+          i1_min[n2] = i1_min_tmp;
+          i1_max[n2] = i1_max_tmp;
+          j1_min[n2] = j1_min_tmp;
+          j1_max[n2] = j1_max_tmp;
+        }
+      }
+
+
+#pragma acc parallel loop collapse(2) present(input_grid[itile].xt[:nxd*nyd],   \
+                                              input_grid[itile].yt[:nxd*nyd], \
+                                              input_grid[itile].zt[:nxd*nyd], \
+                                              output_grid->xt[:ncells_output], \
+                                              output_grid->yt[:ncells_output], \
+                                              output_grid->zt[:ncells_output], \
+                                              interp_acc->index[:3*ncells_output]) \
+                                       deviceptr(shortest, found, i1_min, j1_min, i1_max, j1_max)\
+                                       copyin(i2_start, j2_start, i2_end, j2_end)
+      for( int j2=j2_start ; j2<j2_end; j2++ ) {
+        for( int i2=i2_start ; i2<i2_end ; i2++ ) {
+          int n2 = j2*nlon_output_cells + i2;
+          int i1_start = i1_min[n2];
+          int j1_start = j1_min[n2];
+          int i1_end = i1_max[n2];
+          int j1_end = j1_max[n2];
+          double distance, v1[3], v2[3];
+          get_vector(output_grid, n2, v2);
 #pragma acc loop seq
-        for( int j1=j1_start ; j1<=j1_end ; j1++) {
+          for( int j1=j1_start ; j1<=j1_end ; j1++) {
 #pragma acc loop seq
-          for( int i1=i1_start ; i1<=i1_end ; i1++) {
-            if(found[n2]) continue;
-            int n1 = j1*nxd + i1;
-            v1[0] = input_grid[itile].xt[n1];
-            v1[1] = input_grid[itile].yt[n1];
-            v1[2] = input_grid[itile].zt[n1];
-            distance = normalize_great_circle_distance_acc(v1, v2);
-            if( distance < shortest[n2]) {
-              shortest[n2] = distance;
-              found[n2] = get_closest_index_acc(input_grid+itile, output_grid,
-                                                interp_acc->index+3*n2, i1, j1, itile, i2, j2);
+            for( int i1=i1_start ; i1<=i1_end ; i1++) {
+              int n1 = j1*nxd + i1;
+              get_vector(input_grid+itile, n1, v1);
+              distance = normalize_great_circle_distance_acc(v1, v2);
+              if( distance > shortest[n2]) continue;
+              if( get_closest_index_acc(input_grid+itile, output_grid, interp_acc->index+3*n2,
+                                        i1, j1, itile, i2, j2) ) {
+                found[n2] = 1;
+                shortest[n2] = distance;
+              }
             }
           }
         }
       }
-    }
 
-  } // itile
+      time_end = clock();
+      time[itile] = time[itile] + (float)(time_end-time_start)/CLOCKS_PER_SEC;
 
+    } // itile
+
+    total_found = 0;
 #pragma acc parallel loop deviceptr(found) copy(total_found)
-  for(int n2=0; n2<ncells_output ; n2++) {
-    total_found = total_found + found[n2];
-  }
+    for(int n2=0; n2<ncells_output ; n2++) {
+      total_found = total_found + found[n2];
+    }
+    if(total_found == ncells_output) break;
+
+  } //iiter
+
+for(int itile=0 ; itile<input_ntiles ; itile++) printf("ITILE %d %f\n", itile, time[itile]);
 
   acc_free(i2_min);
   acc_free(i2_max);
@@ -1107,8 +982,7 @@ void get_interp_weights(const int input_ntiles, const int output_ntiles, const G
   int nxd = nlon_input_cells + 2;
   int nyd = nlat_input_cells + 2;
 
-#pragma acc data present(interp_acc[:1], input_grid[:input_ntiles], output_grid[:output_ntiles])
-#pragma acc parallel loop collapse(2)
+#pragma acc parallel loop collapse(2) present(interp_acc[:1], input_grid[:input_ntiles], output_grid[:output_ntiles])
   for(int j=0; j<nlat_output_cells; j++) {
     for(int i=0; i<nlon_output_cells; i++) {
 
