@@ -29,16 +29,19 @@ void get_grid_area_acc(const int *nlon, const int *nlat, const double *lon, cons
 
 void get_grid_great_circle_area_acc(const int *nlon, const int *nlat, const double *lon, const double *lat, double *area);
 
-#pragma acc routine seq
+#pragma omp declare target
 void poly_ctrlon_acc(const double *x, const double *y, int n, double clon_in, double *crtlon);
+#pragma omp end declare target
 
-#pragma acc routine seq
+#pragma omp declare target
 void poly_ctrlat_acc(const double *x, const double *y, int n, double *crtlat);
+#pragma omp end declare target
 
-#pragma acc routine seq
+#pragma omp declare target
 int clip_2dx2d_acc(const double lon1_in[], const double lat1_in[], int n1_in,
                    const double lon2_in[], const double lat2_in[], int n2_in,
                    double lon_out[], double lat_out[]);
+#pragma omp end declare target
 
 int clip_2dx2d_great_circle_acc(const double x1_in[], const double y1_in[], const double z1_in[], int n1_in,
                                 const double x2_in[], const double y2_in[], const double z2_in [], int n2_in,
@@ -49,8 +52,9 @@ void get_grid_cell_struct_acc( const int nlon, const int nlat, const Grid_config
 
 void free_grid_cell_struct_acc( const int ncells, Grid_cells_struct_config *grid_cells);
 
-#pragma acc routine seq
+#pragma omp declare target
 void get_cell_vertices_acc( const int ij, const int nlon, const double *lon, const double *lat, double *x, double *y );
+#pragma omp end declare target
 
 void create_upbound_nxcells_arrays_on_device_acc(const int n, int **approx_nxcells_per_ij1,
                                                  int **ij2_start, int **ij2_end);
@@ -58,8 +62,8 @@ void create_upbound_nxcells_arrays_on_device_acc(const int n, int **approx_nxcel
 void free_upbound_nxcells_arrays_acc( const int n, int **approx_nxcells_per_ij1,
                                               int **ij2_start, int **ij2_end);
 
-void copy_data_to_xgrid_on_device_acc(const int nxcells, const int input_ncells, const int upbound_nxcells,
-                                      int *xcells_per_ij1, double *xcell_clon, double *xcell_clat,
-                                      int *approx_xcells_per_ij1, int *parent_input_indices, int *parent_output_indices,
-                                      double *xcell_areas, Interp_per_input_tile *interp_for_input_tile);
+void copy_data_to_interp_on_device_acc(const int nxcells, const int input_ncells, const int upbound_nxcells,
+                                       int *xcells_per_ij1, double *xcell_clon, double *xcell_clat,
+                                       int *approx_xcells_per_ij1, int *parent_input_indices, int *parent_output_indices,
+                                       double *xcell_areas, Interp_per_input_tile *interp_for_input_tile);
 #endif

@@ -82,3 +82,5 @@ void set_remap_file_acc( int ntiles, const char *mosaic_file, const char *remap_
   if(ntiles>1) mpp_close(fid);
 
 };/* set_remap_file */
+
+// Code was translated using: /home/Mikyung.Lee/FRE-NCTools/intel-openmp-conversion-redo/intel_converter/src/intel-application-migration-tool-for-openacc-to-openmp fregrid_utils_acc.c

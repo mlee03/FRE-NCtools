@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <openacc.h>
+#include <omp.h>
 #include "general_utils_acc.h"
 #include "create_xgrid_acc.h"
 #include "create_xgrid_utils_acc.h"
@@ -50,19 +51,14 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
   int ij1_end = (jlat_overlap_ends+1)*nlon_input_cells;
   int upbound_nxcells=0;
 
-#pragma acc data present(output_grid_lon[:output_grid_npts],  \
-                         output_grid_lat[:output_grid_npts],  \
-                         input_grid_lon[:input_grid_npts],   \
-                         input_grid_lat[:input_grid_npts],          \
-                         output_grid_cells[:1],                     \
-                         approx_xcells_per_ij1[:input_grid_ncells], \
-                         ij2_start[:input_grid_ncells],             \
-                         ij2_end[:input_grid_ncells],               \
-                         skip_input_cells[:input_grid_ncells])
-#pragma acc data copyin(input_grid_ncells, \
-                        output_grid_ncells)
-#pragma acc data copy(upbound_nxcells)
-#pragma acc parallel loop independent reduction(+:upbound_nxcells)
+#pragma omp target data map(present,alloc:output_grid_lon[:output_grid_npts],\
+            output_grid_lat[:output_grid_npts],input_grid_lon[:input_grid_npts],\
+            input_grid_lat[:input_grid_npts],output_grid_cells[:1],\
+            approx_xcells_per_ij1[:input_grid_ncells],ij2_start[:input_grid_ncells],\
+            ij2_end[:input_grid_ncells],skip_input_cells[:input_grid_ncells])
+#pragma omp target data map(to:input_grid_ncells,output_grid_ncells)
+#pragma omp target data map(tofrom:upbound_nxcells)
+#pragma omp target teams loop reduction(+:upbound_nxcells) order(concurrent)
   for( int ij1=ij1_start ; ij1<ij1_end ; ij1++) {
     if( skip_input_cells[ij1] > MASK_THRESH ) {
 
@@ -82,9 +78,8 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
 
       approx_xcells_per_ij1[ij1]=0;
 
-#pragma acc loop independent reduction(+:upbound_nxcells) reduction(+:i_approx_xcells_per_ij1) \
-                             reduction(min:ij2_min) reduction(max:ij2_max)
-
+#pragma omp loop reduction(+:upbound_nxcells) reduction(+:i_approx_xcells_per_ij1)\
+            reduction(min:ij2_min) reduction(max:ij2_max) order(concurrent)
       for(int ij2=0; ij2<output_grid_ncells; ij2++) {
 
         double dlon_cent, output_cell_lon_min, output_cell_lon_max;
@@ -162,27 +157,19 @@ int create_xgrid_2dx2d_order1_acc(const int nlon_input_cells,  const int nlat_in
   int *nxcells_per_ij1     = NULL ; nxcells_per_ij1 = (int *)malloc(input_grid_ncells*sizeof(int));
   double *store_xcell_area = NULL ; store_xcell_area =  (double *)malloc(upbound_nxcells*sizeof(double));
 
-#pragma acc enter data create(parent_input_index[:upbound_nxcells],  \
-                              parent_output_index[:upbound_nxcells], \
-                              store_xcell_area[:upbound_nxcells],    \
-                              nxcells_per_ij1[:input_grid_ncells])
-
-#pragma acc data present(output_grid_lon[:output_grid_npts],         \
-                         output_grid_lat[:output_grid_npts],         \
-                         input_grid_lon[:input_grid_npts],           \
-                         input_grid_lat[:input_grid_npts],           \
-                         output_grid_cells[:1],                      \
-                         approx_nxcells_per_ij1[:input_grid_ncells], \
-                         ij2_start[:input_grid_ncells],              \
-                         ij2_end[:input_grid_ncells],                \
-                         mask_input_grid[:input_grid_ncells],        \
-                         nxcells_per_ij1[:input_grid_ncells],        \
-                         parent_input_index[:upbound_nxcells],       \
-                         parent_output_index[:upbound_nxcells],      \
-                         store_xcell_area[:upbound_nxcells])         \
-  copyin(input_grid_ncells, output_grid_ncells)                      \
-  copy(nxcells)
-#pragma acc parallel loop reduction(+:nxcells)
+#pragma omp target enter data map(alloc:parent_input_index[:upbound_nxcells],\
+            parent_output_index[:upbound_nxcells],store_xcell_area[:upbound_nxcells],\
+            nxcells_per_ij1[:input_grid_ncells])
+#pragma omp target data map(tofrom:nxcells) map(to:input_grid_ncells,\
+            output_grid_ncells) map(present,alloc:output_grid_lon[:output_grid_npts],\
+            output_grid_lat[:output_grid_npts],input_grid_lon[:input_grid_npts],\
+            input_grid_lat[:input_grid_npts],output_grid_cells[:1],\
+            approx_nxcells_per_ij1[:input_grid_ncells],ij2_start[:input_grid_ncells],\
+            ij2_end[:input_grid_ncells],mask_input_grid[:input_grid_ncells],\
+            nxcells_per_ij1[:input_grid_ncells],parent_input_index[:upbound_nxcells],\
+            parent_output_index[:upbound_nxcells],\
+            store_xcell_area[:upbound_nxcells])
+#pragma omp target teams loop reduction(+:nxcells)
   for(int ij1=ij1_start; ij1<ij1_end; ij1++) {
     if(mask_input_grid[ij1] > MASK_THRESH)  {
 
@@ -199,11 +186,9 @@ int create_xgrid_2dx2d_order1_acc(const int nlon_input_cells,  const int nlat_in
       double input_cell_lon_cent = avgval_double_acc(nvertices1, input_cell_lon_vertices);
       double input_cell_area = poly_area_acc(input_cell_lon_vertices, input_cell_lat_vertices, nvertices1);
 
-#pragma acc loop seq
       for(int i=1; i<=ij1 ; i++) approx_nxcells_b4_ij1 += approx_nxcells_per_ij1[i-1];
       nxcells_per_ij1[ij1]=0;
 
-#pragma acc loop seq reduction(+:ixcell)
       for(int ij2=ij2_start[ij1]; ij2<=ij2_end[ij1]; ij2++) {
 
         int nvertices2, xvertices=1;
@@ -261,10 +246,9 @@ int create_xgrid_2dx2d_order1_acc(const int nlon_input_cells,  const int nlat_in
                                     approx_nxcells_per_ij1, parent_input_index, parent_output_index,
                                     store_xcell_area, interp_for_itile);
 
-#pragma acc exit data delete( parent_input_index[:upbound_nxcells],  \
-                              parent_output_index[:upbound_nxcells], \
-                              store_xcell_area[:upbound_nxcells],    \
-                              nxcells_per_ij1[:input_grid_ncells])
+#pragma omp target exit data map(delete:parent_input_index[:upbound_nxcells],\
+            parent_output_index[:upbound_nxcells],store_xcell_area[:upbound_nxcells],\
+            nxcells_per_ij1[:input_grid_ncells])
 
   free(parent_input_index) ; parent_input_index = NULL;
   free(parent_output_index); parent_output_index = NULL;
@@ -314,33 +298,24 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_input_cells,  const int nlat_in
   double *summed_input_clat=NULL; summed_input_clat = (double *)malloc(input_grid_ncells*sizeof(double));
   double *summed_input_clon=NULL; summed_input_clon = (double *)malloc(input_grid_ncells*sizeof(double));
 
-#pragma acc enter data create(parent_input_index[:upbound_nxcells],  \
-                              parent_output_index[:upbound_nxcells], \
-                              store_xcell_area[:upbound_nxcells],    \
-                              nxcells_per_ij1[:input_grid_ncells],   \
-                              store_xcell_dclon[:upbound_nxcells],   \
-                              store_xcell_dclat[:upbound_nxcells],   \
-                              summed_input_area[:input_grid_ncells], \
-                              summed_input_clon[:input_grid_ncells], \
-                              summed_input_clat[:input_grid_ncells])
+#pragma omp target enter data map(alloc:parent_input_index[:upbound_nxcells],\
+            parent_output_index[:upbound_nxcells],store_xcell_area[:upbound_nxcells],\
+            nxcells_per_ij1[:input_grid_ncells],store_xcell_dclon[:upbound_nxcells],\
+            store_xcell_dclat[:upbound_nxcells],\
+            summed_input_area[:input_grid_ncells],\
+            summed_input_clon[:input_grid_ncells],\
+            summed_input_clat[:input_grid_ncells])
 
-#pragma acc data present(output_grid_lon[:output_grid_npts],         \
-                         output_grid_lat[:output_grid_npts],         \
-                         input_grid_lon[:input_grid_npts],           \
-                         input_grid_lat[:input_grid_npts],           \
-                         output_grid_cells[:1],                      \
-                         approx_nxcells_per_ij1[:input_grid_ncells], \
-                         ij2_start[:input_grid_ncells],              \
-                         ij2_end[:input_grid_ncells],                \
-                         mask_input_grid[:input_grid_ncells],        \
-                         nxcells_per_ij1[:input_grid_ncells],        \
-                         parent_input_index[:upbound_nxcells],       \
-                         parent_output_index[:upbound_nxcells],      \
-                         store_xcell_area[:upbound_nxcells],         \
-                         store_xcell_dclon[:upbound_nxcells],        \
-                         store_xcell_dclat[:upbound_nxcells])        \
-  copyin(input_grid_ncells, output_grid_ncells) copy(nxcells)
-#pragma acc parallel loop reduction(+:nxcells)
+#pragma omp target data map(tofrom:nxcells) map(to:input_grid_ncells,output_grid_ncells)\
+        map(present,alloc:output_grid_lon[:output_grid_npts],                 \
+            output_grid_lat[:output_grid_npts],input_grid_lon[:input_grid_npts],\
+            input_grid_lat[:input_grid_npts],output_grid_cells[:1],\
+            approx_nxcells_per_ij1[:input_grid_ncells],ij2_start[:input_grid_ncells],\
+            ij2_end[:input_grid_ncells],mask_input_grid[:input_grid_ncells],\
+            nxcells_per_ij1[:input_grid_ncells],parent_input_index[:upbound_nxcells],\
+            parent_output_index[:upbound_nxcells],store_xcell_area[:upbound_nxcells],\
+            store_xcell_dclon[:upbound_nxcells],store_xcell_dclat[:upbound_nxcells])
+#pragma omp target teams loop reduction(+:nxcells)
   for(int ij1=ij1_start; ij1<ij1_end; ij1++) {
     if(mask_input_grid[ij1] > MASK_THRESH)  {
 
@@ -360,13 +335,8 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_input_cells,  const int nlat_in
       double input_cell_lon_cent = avgval_double_acc(nvertices1, input_cell_lon_vertices);
       double input_cell_area = poly_area_acc(input_cell_lon_vertices, input_cell_lat_vertices, nvertices1);
 
-#pragma acc loop seq
       for(int i=1; i<=ij1 ; i++) approx_nxcells_b4_ij1 += approx_nxcells_per_ij1[i-1];
 
-#pragma acc loop seq reduction(+:ixcell)                \
-                     reduction(+:summed_input_area_ij1) \
-                     reduction(+:summed_input_clon_ij1) \
-                     reduction(+:summed_input_clat_ij1)
       for(int ij2=ij2_start[ij1]; ij2<=ij2_end[ij1]; ij2++) {
 
         int nvertices2, xvertices=1;
@@ -435,15 +405,14 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_input_cells,  const int nlat_in
                                     store_xcell_dclon, store_xcell_dclat, approx_nxcells_per_ij1, parent_input_index,
                                     parent_output_index, store_xcell_area, interp_for_itile);
 
-#pragma acc parallel loop present(interp_for_itile->dcentroid_lat[:nxcells], \
-                                  interp_for_itile->dcentroid_lat[:nxcells], \
-                                  input_grid_lon[:input_grid_ncells],   \
-                                  input_grid_lat[:input_grid_ncells],   \
-                                  summed_input_area[:input_grid_ncells], \
-                                  summed_input_clon[:input_grid_ncells], \
-                                  summed_input_clat[:input_grid_ncells], \
-                                  interp_for_itile->input_parent_cell_index[:nxcells]) \
-                           copyin(readin_input_area[:input_grid_ncells])
+#pragma omp target teams loop map(to:readin_input_area[:input_grid_ncells])\
+            map(present,alloc:interp_for_itile->dcentroid_lat[:nxcells],\
+            interp_for_itile->dcentroid_lat[:nxcells],\
+            input_grid_lon[:input_grid_ncells],input_grid_lat[:input_grid_ncells],\
+            summed_input_area[:input_grid_ncells],\
+            summed_input_clon[:input_grid_ncells],\
+            summed_input_clat[:input_grid_ncells],\
+            interp_for_itile->input_parent_cell_index[:nxcells])
     for(int ix=0 ; ix<nxcells ; ix++){
       int ij1 = interp_for_itile->input_parent_cell_index[ix];
       double input_area = summed_input_area[ij1];
@@ -463,15 +432,13 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_input_cells,  const int nlat_in
       interp_for_itile->dcentroid_lat[ix] -= input_clat/input_area;
     }
 
-#pragma acc exit data delete( parent_input_index[:upbound_nxcells],     \
-                              parent_output_index[:upbound_nxcells],    \
-                              store_xcell_area[:upbound_nxcells],       \
-                              nxcells_per_ij1[:input_grid_ncells],      \
-                              store_xcell_dclon[:upbound_nxcells],      \
-                              store_xcell_dclat[:upbound_nxcells],      \
-                              summed_input_area[:input_grid_ncells],    \
-                              summed_input_clon[:input_grid_ncells],    \
-                              summed_input_clat[:input_grid_ncells])
+#pragma omp target exit data map(delete:parent_input_index[:upbound_nxcells],\
+            parent_output_index[:upbound_nxcells],store_xcell_area[:upbound_nxcells],\
+            nxcells_per_ij1[:input_grid_ncells],store_xcell_dclon[:upbound_nxcells],\
+            store_xcell_dclat[:upbound_nxcells],\
+            summed_input_area[:input_grid_ncells],\
+            summed_input_clon[:input_grid_ncells],\
+            summed_input_clat[:input_grid_ncells])
 
     free(parent_input_index)    ; parent_input_index = NULL;
     free(parent_output_index)   ; parent_output_index = NULL;
@@ -592,3 +559,5 @@ int create_xgrid_great_circle_acc(const int *nlon_input_cells, const int *nlat_i
   return nxgrid;
 
 };/* create_xgrid_great_circle */
+
+// Code was translated using: /home/Mikyung.Lee/FRE-NCTools/intel-openmp-conversion-redo/intel_converter/src/intel-application-migration-tool-for-openacc-to-openmp create_xgrid_acc.c

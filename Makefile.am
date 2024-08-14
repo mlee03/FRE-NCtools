@@ -56,8 +56,7 @@ if WITH_CHECK_PROGS
 SUBDIRS += t
 endif
 
-if ENABLE_ACC
+if ENABLE_OMP
 SUBDIRS += tools/libfrencutils_acc
 SUBDIRS += tools/fregrid_acc
-SUBDIRS += t_acc
 endif

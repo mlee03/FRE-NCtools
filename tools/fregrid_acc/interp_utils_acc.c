@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <openacc.h>
+#include <omp.h>
 #include "globals_acc.h"
 #include "general_utils_acc.h"
 
@@ -30,14 +31,14 @@ Copies lat lon coordinates to device
 void copy_grid_to_device_acc( const int npoints, const double *lat, const double *lon )
 {
 
-#pragma acc enter data copyin(lon[:npoints], lat[:npoints])
+#pragma omp target enter data map(to:lon[:npoints],lat[:npoints])
 
 }
 
 void delete_grid_from_device_acc( const int npoints, const double *lat, const double *lon )
 {
 
-#pragma acc exit data delete(lat[:npoints], lon[:npoints])
+#pragma omp target exit data map(delete:lat[:npoints],lon[:npoints])
 
 }
 
@@ -49,20 +50,20 @@ void copy_interp_to_device_acc( const int ntiles_in, const int ntiles_out, const
                                 const unsigned int opcode )
 {
 
-#pragma acc enter data copyin(interp_acc[:ntiles_out])
+#pragma omp target enter data map(to:interp_acc[:ntiles_out])
   for(int otile=0 ; otile<ntiles_out; otile++) {
 
-#pragma acc enter data copyin( interp_acc[otile].input_tile[:ntiles_in] )
+#pragma omp target enter data map(to:interp_acc[otile].input_tile[:ntiles_in])
 
     for(int itile=0 ; itile<ntiles_in ; itile++) {
 
       int nxcells = interp_acc[otile].input_tile[itile].nxcells;
-#pragma acc enter data copyin( interp_acc[otile].input_tile[itile].input_parent_cell_index[:nxcells], \
-                               interp_acc[otile].input_tile[itile].output_parent_cell_index[:nxcells],\
-                               interp_acc[otile].input_tile[itile].xcell_area[:nxcells] )
+#pragma omp target enter data map(to:interp_acc[otile].input_tile[itile].input_parent_cell_index[:nxcells],\
+            interp_acc[otile].input_tile[itile].output_parent_cell_index[:nxcells],\
+            interp_acc[otile].input_tile[itile].xcell_area[:nxcells])
         if( opcode & CONSERVE_ORDER2) {
-#pragma acc enter data copyin( interp_acc[otile].input_tile[itile].dcentroid_lon[:nxcells], \
-                               interp_acc[otile].input_tile[itile].dcentroid_lat[:nxcells])
+#pragma omp target enter data map(to:interp_acc[otile].input_tile[itile].dcentroid_lon[:nxcells],\
+            interp_acc[otile].input_tile[itile].dcentroid_lat[:nxcells])
         }
 
     } // ntiles_in
@@ -83,8 +84,8 @@ void get_input_grid_mask_acc(const int mask_size, double **input_grid_mask)
   p_input_grid_mask = *input_grid_mask;
 
 
-#pragma acc enter data create(p_input_grid_mask[:mask_size])
-#pragma acc parallel loop independent present(p_input_grid_mask[:mask_size])
+#pragma omp target enter data map(alloc:p_input_grid_mask[:mask_size])
+#pragma omp target teams loop order(concurrent) map(present,alloc:p_input_grid_mask[:mask_size])
   for( int i=0 ; i<mask_size; i++) p_input_grid_mask[i]=1.0;
 
 }
@@ -95,7 +96,7 @@ void free_input_grid_mask_acc(const int mask_size, double **input_grid_mask)
 
   p_input_grid_mask = *input_grid_mask;
 
-#pragma acc exit data delete(p_input_grid_mask[:mask_size])
+#pragma omp target exit data map(delete:p_input_grid_mask[:mask_size])
   free(p_input_grid_mask);
   p_input_grid_mask = NULL;
 }

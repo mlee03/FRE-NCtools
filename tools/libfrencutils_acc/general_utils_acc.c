@@ -28,26 +28,34 @@
 #include "general_utils_acc.h"
 #include "globals_acc.h"
 
+#pragma omp declare target
 const double from_pole_threshold_rad_acc = 0.0174533;  // 1.0 deg
+#pragma omp end declare target
 
 //reproduce siena was removed
+#pragma omp declare target
 int rotate_poly_flag_acc = 0;
-double the_rotation_matrix_acc[3][3] = { 0 };
+#pragma omp end declare target
 
-#pragma acc routine seq
+#pragma omp declare target
+double the_rotation_matrix_acc[3][3] = { 0 };
+#pragma omp end declare target
+
+#pragma omp declare target
 void set_rotate_poly_true_acc(void){
   rotate_poly_flag_acc = 1;
   set_the_rotation_matrix_acc();
 }
+#pragma omp end declare target
 
+#pragma omp declare target
 struct Node_acc *nodeList_acc=NULL;
-int curListPos_acc=0;
+#pragma omp end declare target
 
-#pragma acc declare copyin(from_pole_threshold_rad_acc)
-#pragma acc declare copyin(rotate_poly_flag_acc)
-#pragma acc declare copyin(nodeList_acc)
-#pragma acc declare copyin(curListPos_acc)
-#pragma acc declare copyin(the_rotation_matrix_acc)
+#pragma omp declare target
+int curListPos_acc=0;
+#pragma omp end declare target
+
 
 /*********************************************************************
 
@@ -1311,14 +1319,14 @@ void set_the_rotation_matrix_acc() {
   double m11 = 1.0/2;
   double m12 = 0.5;
 
-  double m[3][3] = { {m00, m01, m02}, {m02, m11, m12},{m01, m12, m11} };
+  double m[3][3] = { {m00, m01, m02}, {m02, m11, m12}, {m01, m12, m11} };
 
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 3; j++) {
       the_rotation_matrix_acc[i][j] = m[i][j];
     }
   }
-#pragma acc data update device(the_rotation_matrix_acc[:3][:3])
+
 }
 
 /* Rotate point given the passed in rotation matrix  */
@@ -1520,3 +1528,5 @@ int line_intersect_2D_3D_acc(double *a1, double *a2, double *q1, double *q2, dou
 
   return 1;
 }
+
+// Code was translated using: /home/Mikyung.Lee/FRE-NCTools/intel-openmp-conversion-redo/intel_converter/src/intel-application-migration-tool-for-openacc-to-openmp general_utils_acc.c

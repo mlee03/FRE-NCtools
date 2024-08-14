@@ -85,11 +85,11 @@ AS_IF([test x"$with_mpi" = x"yes"],
 AM_CONDITIONAL([WITH_MPI], [test x"$build_mpi" = x"yes"])
 AM_CONDITIONAL([WITH_MPI_TESTS], [test x"$build_mpi" = x"yes" -a -z "$SKIP_MPI_TEST"])
 
-#Build with OpenACC suport.  Default is 'no'
-AC_ARG_ENABLE([acc],
-  [AS_HELP_STRING([--enable-acc], [Build with OpenACC support.  Defaults to 'no'])] )
-AS_IF([test ${enable_acc:-no} = "yes"], [enable_acc=yes], [enable_acc=no])
-AM_CONDITIONAL([ENABLE_ACC], [test $enable_acc = "yes"])
+#Build with OpenOMP suport.  Default is 'no'
+AC_ARG_ENABLE([omp],
+  [AS_HELP_STRING([--enable-omp], [Build with OpenOMP support.  Defaults to 'no'])] )
+AS_IF([test ${enable_omp:-no} = "yes"], [enable_omp=yes], [enable_omp=no])
+AM_CONDITIONAL([ENABLE_OMP], [test $enable_omp = "yes"])
 
 AC_CHECK_FUNCS(gettid, [], [])
 
@@ -122,10 +122,9 @@ AC_CHECK_PROGS(PROVE, [prove])
 
 AM_CONDITIONAL([WITH_CHECK_PROGS], [test -n "$PROVE" -a -n "$BATS"])
 
-# Check if openacc.h exists
-if test $enable_acc = yes ; then
-   AC_CHECK_HEADERS([openacc.h], [], [AC_MSG_ERROR(["Cannot find OpenACC header file"])] )
-   AC_MSG_WARN(Currently only NVIDIA compilers are supported to compile with OpenACC in FRE-NCTOOLS)
+# Check if openomp.h exists
+if test $enable_omp = yes ; then
+   AC_CHECK_HEADERS([omp.h], [], [AC_MSG_ERROR(["Cannot find OpenMP header file"])] )
 fi
 
 # Check for library
@@ -220,11 +219,6 @@ AC_CONFIG_FILES([Makefile
                  tools/simple_hydrog/rmvpr/Makefile
                  tools/simple_hydrog/libfmslite/Makefile
                  t/Makefile
-                 t_acc/Makefile
-                 t_acc/test_read_remap_file/Makefile
-                 t_acc/test_get_grid_cell_struct/Makefile
-                 t_acc/test_get_upbound_nxcells_2dx2d/Makefile
-                 t_acc/test_get_interp_order1/Makefile
 
 ])
 

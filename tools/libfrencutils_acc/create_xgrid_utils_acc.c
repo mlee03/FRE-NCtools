@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <openacc.h>
+#include <omp.h>
 #include "general_utils_acc.h"
 #include "create_xgrid_utils_acc.h"
 #include "globals_acc.h"
@@ -667,16 +668,30 @@ void get_grid_cell_struct_acc( const int nlon, const int nlat, const Grid_config
     grid_cells->lon_vertices[icell] = (double *)malloc(MAX_V*sizeof(double));
   }
 
-#pragma acc enter data create(grid_cells[:1])
-#pragma acc enter data create(grid_cells->lon_min[:ncells], grid_cells->lon_max[:ncells], \
-                              grid_cells->lat_min[:ncells], grid_cells->lat_max[:ncells], \
-                              grid_cells->lon_cent[:ncells], grid_cells->nvertices[:ncells],\
-                              grid_cells->area[:ncells])
-#pragma acc enter data create(grid_cells->lon_vertices[:ncells][:MAX_V], \
-                              grid_cells->lat_vertices[:ncells][:MAX_V])
+#pragma omp target enter data map(alloc:grid_cells[:1])
+#pragma omp target enter data map(alloc:grid_cells->lon_min[:ncells],\
+            grid_cells->lon_max[:ncells],grid_cells->lat_min[:ncells],\
+            grid_cells->lat_max[:ncells],grid_cells->lon_cent[:ncells],\
+            grid_cells->nvertices[:ncells],grid_cells->area[:ncells])
+#pragma omp target enter data map(alloc:grid_cells->lon_vertices[:ncells][:MAX_V],\
+            grid_cells->lat_vertices[:ncells][:MAX_V])
+// ATTENTION! The following suggested code is an alternative reference implementation
+// ATTENTION! that could be used if grid_cells->lon_vertices is a non-contiguous allocated multi-dimensional array
+// #pragma omp target enter data map(alloc:grid_cells->lon_vertices[0:ncells])
+// for (int _idx0 = 0; _idx0 < ncells; ++_idx0)
+// {
+//   #pragma omp target enter data map(alloc:grid_cells->lon_vertices[0+_idx0][:MAX_V])
+// }
+// ATTENTION! The following suggested code is an alternative reference implementation
+// ATTENTION! that could be used if grid_cells->lat_vertices is a non-contiguous allocated multi-dimensional array
+// #pragma omp target enter data map(alloc:grid_cells->lat_vertices[0:ncells])
+// for (int _idx0 = 0; _idx0 < ncells; ++_idx0)
+// {
+//   #pragma omp target enter data map(alloc:grid_cells->lat_vertices[0+_idx0][:MAX_V])
+// }
 
-#pragma acc data present(grid_cells[:1], lon[:npts], lat[:npts])
-#pragma acc parallel loop independent
+#pragma omp target data map(present,alloc:grid_cells[:1],lon[:npts],lat[:npts])
+#pragma omp target teams loop order(concurrent)
   for(int icell=0; icell<ncells; icell++){
     int nvertices;
     double lon_vertices[MV], lat_vertices[MV];
@@ -708,23 +723,18 @@ void free_grid_cell_struct_acc( const int ncells, Grid_cells_struct_config *grid
 {
 
   for(int icell=0 ; icell<MAX_V ; icell++) {
-#pragma acc exit data delete( grid_cells->lon_vertices[icell])
+#pragma omp target exit data map(delete:grid_cells->lon_vertices[icell])
   }
 
   for(int icell=0 ; icell<MAX_V ; icell++) {
-#pragma acc exit data delete( grid_cells->lat_vertices[icell])
+#pragma omp target exit data map(delete:grid_cells->lat_vertices[icell])
   }
 
-#pragma acc exit data delete( grid_cells->lon_vertices,  \
-                              grid_cells->lat_vertices,  \
-                              grid_cells->lon_min,       \
-                              grid_cells->lon_max,       \
-                              grid_cells->lon_cent,      \
-                              grid_cells->lat_max,       \
-                              grid_cells->lat_min,       \
-                              grid_cells->nvertices,     \
-                              grid_cells->area)
-#pragma acc exit data delete(grid_cells)
+#pragma omp target exit data map(delete:grid_cells->lon_vertices,\
+            grid_cells->lat_vertices,grid_cells->lon_min,grid_cells->lon_max,\
+            grid_cells->lon_cent,grid_cells->lat_max,grid_cells->lat_min,\
+            grid_cells->nvertices,grid_cells->area)
+#pragma omp target exit data map(delete:grid_cells)
 
   for(int icell=0 ; icell<MAX_V ; icell++) {
     free(grid_cells->lon_vertices[icell]);
@@ -778,9 +788,7 @@ void create_upbound_nxcells_arrays_on_device_acc(const int n, int **approx_nxcel
   p_ij2_start = *ij2_start;
   p_ij2_end = *ij2_end;
 
-#pragma acc enter data copyin(p_approx_nxcells_per_ij1[:n],   \
-                              p_ij2_start[:n],                \
-                              p_ij2_end[:n])
+#pragma omp target enter data map(to:p_approx_nxcells_per_ij1[:n],p_ij2_start[:n],p_ij2_end[:n])
 
 }
 
@@ -795,9 +803,7 @@ void free_upbound_nxcells_arrays_acc( const int n, int **approx_nxcells_per_ij1,
   p_ij2_start = *ij2_start;
   p_ij2_end = *ij2_end;
 
-#pragma acc exit data delete(p_approx_nxcells_per_ij1[:n],  \
-                             p_ij2_start[:n],               \
-                             p_ij2_end[:n])
+#pragma omp target exit data map(delete:p_approx_nxcells_per_ij1[:n],p_ij2_start[:n],p_ij2_end[:n])
 
   free(*approx_nxcells_per_ij1); *approx_nxcells_per_ij1 = NULL;
   free(*ij2_start)             ; *ij2_start = NULL;
@@ -822,28 +828,29 @@ void copy_data_to_interp_on_device_acc(const int nxcells, const int input_ncells
       interp_for_input_tile->dcentroid_lat = (double *)malloc(nxcells*sizeof(double));
     }
 
-#pragma acc enter data copyin(interp_for_input_tile[:1])
-#pragma acc enter data create(interp_for_input_tile->input_parent_cell_index[:nxcells], \
-                              interp_for_input_tile->output_parent_cell_index[:nxcells], \
-                              interp_for_input_tile->xcell_area[:nxcells])
-#pragma acc enter data if(copy_xcentroid) create(interp_for_input_tile->dcentroid_lon[:nxcells], \
-                                                 interp_for_input_tile->dcentroid_lat[:nxcells])
-
-#pragma acc data present(xcells_per_ij1[:input_ncells], approx_xcells_per_ij1[:input_ncells], \
-                         parent_input_index[:upbound_nxcells],        \
-                         parent_output_index[:upbound_nxcells],       \
-                         xcell_areas[:upbound_nxcells], interp_for_input_tile[:1])
-#pragma acc parallel loop independent async(0)
+#pragma omp target enter data map(to:interp_for_input_tile[:1])
+#pragma omp target enter data\
+            map(alloc:interp_for_input_tile->input_parent_cell_index[:nxcells],\
+            interp_for_input_tile->output_parent_cell_index[:nxcells],\
+            interp_for_input_tile->xcell_area[:nxcells])
+#pragma omp target enter data map(alloc:interp_for_input_tile->dcentroid_lon[:nxcells],\
+            interp_for_input_tile->dcentroid_lat[:nxcells]) if(copy_xcentroid)
+#pragma omp target data map(present,alloc:xcells_per_ij1[:input_ncells],\
+            approx_xcells_per_ij1[:input_ncells],\
+            parent_input_index[:upbound_nxcells],\
+            parent_output_index[:upbound_nxcells],xcell_areas[:upbound_nxcells],\
+            interp_for_input_tile[:1])
+#pragma omp target teams loop order(concurrent) nowait
     for(int ij1=0 ; ij1<input_ncells ; ij1++) {
       int xcells_before_ij1 = 0, approx_xcells=0 ;
 
-#pragma acc loop
+#pragma omp loop
       for(int i=1 ; i<=ij1 ; i++) {
         xcells_before_ij1 += xcells_per_ij1[i-1];
         approx_xcells += approx_xcells_per_ij1[i-1];
       }
 
-#pragma acc loop independent
+#pragma omp loop order(concurrent)
       for(int i=0 ; i<xcells_per_ij1[ij1]; i++){
         interp_for_input_tile->input_parent_cell_index[xcells_before_ij1+i]  = parent_input_index[approx_xcells+i];
         interp_for_input_tile->output_parent_cell_index[xcells_before_ij1+i] = parent_output_index[approx_xcells+i];
@@ -852,22 +859,23 @@ void copy_data_to_interp_on_device_acc(const int nxcells, const int input_ncells
     }
 
     if(copy_xcentroid==1) {
-#pragma acc data present(xcells_per_ij1[:input_ncells], approx_xcells_per_ij1[:input_ncells], \
-                         parent_input_index[:upbound_nxcells],        \
-                         parent_output_index[:upbound_nxcells],       \
-                         xcell_areas[:upbound_nxcells], interp_for_input_tile[:1], \
-                         xcell_dclon[:upbound_nxcells], xcell_dclat[:upbound_nxcells])
-#pragma acc parallel loop independent async(1)
+#pragma omp target data map(present,alloc:xcells_per_ij1[:input_ncells],\
+            approx_xcells_per_ij1[:input_ncells],\
+            parent_input_index[:upbound_nxcells],\
+            parent_output_index[:upbound_nxcells],xcell_areas[:upbound_nxcells],\
+            interp_for_input_tile[:1],xcell_dclon[:upbound_nxcells],\
+            xcell_dclat[:upbound_nxcells])
+#pragma omp target teams loop order(concurrent) nowait
       for(int ij1=0 ; ij1<input_ncells ; ij1++) {
         int xcells_before_ij1 = 0, approx_xcells=0 ;
 
-#pragma acc loop
+#pragma omp loop
         for(int i=1 ; i<=ij1 ; i++) {
           xcells_before_ij1 += xcells_per_ij1[i-1];
           approx_xcells += approx_xcells_per_ij1[i-1];
         }
 
-#pragma acc loop independent
+#pragma omp loop order(concurrent)
         for(int i=0 ; i<xcells_per_ij1[ij1]; i++){
           interp_for_input_tile->dcentroid_lon[xcells_before_ij1+i] = xcell_dclon[approx_xcells+i];
           interp_for_input_tile->dcentroid_lat[xcells_before_ij1+i] = xcell_dclat[approx_xcells+i];
@@ -875,7 +883,7 @@ void copy_data_to_interp_on_device_acc(const int nxcells, const int input_ncells
       }
     }
 
-#pragma acc wait
+#pragma omp taskwait
 
   }//if nxcells>0
 
