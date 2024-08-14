@@ -661,34 +661,16 @@ void get_grid_cell_struct_acc( const int nlon, const int nlat, const Grid_config
   grid_cells->lon_cent  = (double *)malloc(ncells*sizeof(double));
   grid_cells->area      = (double *)malloc(ncells*sizeof(double));
   grid_cells->nvertices = (int *)malloc(ncells*sizeof(int));
-  grid_cells->lon_vertices  = (double **)malloc(ncells*sizeof(double));
-  grid_cells->lat_vertices  = (double **)malloc(ncells*sizeof(double));
-  for(int icell=0 ; icell<ncells ; icell++) {
-    grid_cells->lat_vertices[icell] = (double *)malloc(MAX_V*sizeof(double));
-    grid_cells->lon_vertices[icell] = (double *)malloc(MAX_V*sizeof(double));
-  }
+  grid_cells->lat_vertices = (double *)malloc(MAX_V*sizeof(double));
+  grid_cells->lon_vertices = (double *)malloc(MAX_V*sizeof(double));
 
 #pragma omp target enter data map(alloc:grid_cells[:1])
 #pragma omp target enter data map(alloc:grid_cells->lon_min[:ncells],\
             grid_cells->lon_max[:ncells],grid_cells->lat_min[:ncells],\
             grid_cells->lat_max[:ncells],grid_cells->lon_cent[:ncells],\
-            grid_cells->nvertices[:ncells],grid_cells->area[:ncells])
-#pragma omp target enter data map(alloc:grid_cells->lon_vertices[:ncells][:MAX_V],\
-            grid_cells->lat_vertices[:ncells][:MAX_V])
-// ATTENTION! The following suggested code is an alternative reference implementation
-// ATTENTION! that could be used if grid_cells->lon_vertices is a non-contiguous allocated multi-dimensional array
-// #pragma omp target enter data map(alloc:grid_cells->lon_vertices[0:ncells])
-// for (int _idx0 = 0; _idx0 < ncells; ++_idx0)
-// {
-//   #pragma omp target enter data map(alloc:grid_cells->lon_vertices[0+_idx0][:MAX_V])
-// }
-// ATTENTION! The following suggested code is an alternative reference implementation
-// ATTENTION! that could be used if grid_cells->lat_vertices is a non-contiguous allocated multi-dimensional array
-// #pragma omp target enter data map(alloc:grid_cells->lat_vertices[0:ncells])
-// for (int _idx0 = 0; _idx0 < ncells; ++_idx0)
-// {
-//   #pragma omp target enter data map(alloc:grid_cells->lat_vertices[0+_idx0][:MAX_V])
-// }
+            grid_cells->nvertices[:ncells],grid_cells->area[:ncells], \
+            grid_cells->lon_vertices[:ncells*MAX_V], \
+            grid_cells->lat_vertices[:ncells*MAX_V])
 
 #pragma omp target data map(present,alloc:grid_cells[:1],lon[:npts],lat[:npts])
 #pragma omp target teams loop order(concurrent)
@@ -712,8 +694,8 @@ void get_grid_cell_struct_acc( const int nlon, const int nlat, const Grid_config
     grid_cells->area[icell] = poly_area_acc(lon_vertices, lat_vertices, nvertices);
 
     for(int ivertex=0 ; ivertex<nvertices ; ivertex++) {
-      grid_cells->lon_vertices[icell][ivertex] = lon_vertices[ivertex];
-      grid_cells->lat_vertices[icell][ivertex] = lat_vertices[ivertex];
+      grid_cells->lon_vertices[icell*MAX_V+ivertex] = lon_vertices[ivertex];
+      grid_cells->lat_vertices[icell*MAX_V+ivertex] = lat_vertices[ivertex];
     }
   }
 
@@ -736,10 +718,6 @@ void free_grid_cell_struct_acc( const int ncells, Grid_cells_struct_config *grid
             grid_cells->nvertices,grid_cells->area)
 #pragma omp target exit data map(delete:grid_cells)
 
-  for(int icell=0 ; icell<MAX_V ; icell++) {
-    free(grid_cells->lon_vertices[icell]);
-    free(grid_cells->lat_vertices[icell]);
-  }
   free(grid_cells->lon_min);  grid_cells->lon_min = NULL;
   free(grid_cells->lon_max);  grid_cells->lon_max = NULL;
   free(grid_cells->lon_cent); grid_cells->lon_cent = NULL;
@@ -747,8 +725,9 @@ void free_grid_cell_struct_acc( const int ncells, Grid_cells_struct_config *grid
   free(grid_cells->lat_max);  grid_cells->lat_max = NULL;
   free(grid_cells->area);     grid_cells->area = NULL;
   free(grid_cells->nvertices); grid_cells->nvertices=NULL;
-  //grid_cells->lon_vertices = NULL;
-  //grid_cells->lat_vertices = NULL;
+  free(grid_cells->lon_vertices); grid_cells->lon_vertices=NULL;
+  free(grid_cells->lat_vertices); grid_cells->lat_vertices=NULL;
+
 }
 
 

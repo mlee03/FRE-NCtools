@@ -160,15 +160,15 @@ int create_xgrid_2dx2d_order1_acc(const int nlon_input_cells,  const int nlat_in
 #pragma omp target enter data map(alloc:parent_input_index[:upbound_nxcells],\
             parent_output_index[:upbound_nxcells],store_xcell_area[:upbound_nxcells],\
             nxcells_per_ij1[:input_grid_ncells])
-#pragma omp target data map(tofrom:nxcells) map(to:input_grid_ncells,\
-            output_grid_ncells) map(present,alloc:output_grid_lon[:output_grid_npts],\
-            output_grid_lat[:output_grid_npts],input_grid_lon[:input_grid_npts],\
-            input_grid_lat[:input_grid_npts],output_grid_cells[:1],\
-            approx_nxcells_per_ij1[:input_grid_ncells],ij2_start[:input_grid_ncells],\
-            ij2_end[:input_grid_ncells],mask_input_grid[:input_grid_ncells],\
-            nxcells_per_ij1[:input_grid_ncells],parent_input_index[:upbound_nxcells],\
-            parent_output_index[:upbound_nxcells],\
-            store_xcell_area[:upbound_nxcells])
+#pragma omp target data map(tofrom:nxcells) map(to:input_grid_ncells, output_grid_ncells) \
+  map(present,alloc:output_grid_lon[:output_grid_npts],                 \
+      output_grid_lat[:output_grid_npts],input_grid_lon[:input_grid_npts], \
+      input_grid_lat[:input_grid_npts],output_grid_cells[:1],           \
+      approx_nxcells_per_ij1[:input_grid_ncells],ij2_start[:input_grid_ncells], \
+      ij2_end[:input_grid_ncells],mask_input_grid[:input_grid_ncells],  \
+      nxcells_per_ij1[:input_grid_ncells],parent_input_index[:upbound_nxcells], \
+      parent_output_index[:upbound_nxcells],                            \
+      store_xcell_area[:upbound_nxcells])
 #pragma omp target teams loop reduction(+:nxcells)
   for(int ij1=ij1_start; ij1<ij1_end; ij1++) {
     if(mask_input_grid[ij1] > MASK_THRESH)  {
@@ -215,8 +215,8 @@ int create_xgrid_2dx2d_order1_acc(const int nlon_input_cells,  const int nlat_in
         output_cell_lon_min += rotate;
         output_cell_lon_max += rotate;
         for (int l=0; l<nvertices2; l++) {
-          output_cell_lon_vertices[l] = output_grid_cells->lon_vertices[ij2][l] + rotate;
-          output_cell_lat_vertices[l] = output_grid_cells->lat_vertices[ij2][l];
+          output_cell_lon_vertices[l] = output_grid_cells->lon_vertices[ij2*MAX_V+l] + rotate;
+          output_cell_lat_vertices[l] = output_grid_cells->lat_vertices[ij2*MAX_V+l];
         }
 
         //output_cell_lon should in the same range as input_cell_lon after lon_fix,
@@ -361,8 +361,8 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_input_cells,  const int nlat_in
         output_cell_area = output_grid_cells->area[ij2];
 
         for (int l=0; l<nvertices2; l++) {
-          output_cell_lon_vertices[l] = output_grid_cells->lon_vertices[ij2][l] + rotate;
-          output_cell_lat_vertices[l] = output_grid_cells->lat_vertices[ij2][l];
+          output_cell_lon_vertices[l] = output_grid_cells->lon_vertices[ij2*MAX_V+l] + rotate;
+          output_cell_lat_vertices[l] = output_grid_cells->lat_vertices[ij2*MAX_V+l];
         }
 
         //output_cell_lon should in the same range as input_cell_lon after lon_fix,
