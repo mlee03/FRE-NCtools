@@ -661,8 +661,8 @@ void get_grid_cell_struct_acc( const int nlon, const int nlat, const Grid_config
   grid_cells->lon_cent  = (double *)malloc(ncells*sizeof(double));
   grid_cells->area      = (double *)malloc(ncells*sizeof(double));
   grid_cells->nvertices = (int *)malloc(ncells*sizeof(int));
-  grid_cells->lat_vertices = (double *)malloc(MAX_V*sizeof(double));
-  grid_cells->lon_vertices = (double *)malloc(MAX_V*sizeof(double));
+  grid_cells->lat_vertices = (double *)malloc(MAX_V*ncells*sizeof(double));
+  grid_cells->lon_vertices = (double *)malloc(MAX_V*ncells*sizeof(double));
 
 #pragma omp target enter data map(alloc:grid_cells[:1])
 #pragma omp target enter data map(alloc:grid_cells->lon_min[:ncells],\
@@ -672,7 +672,13 @@ void get_grid_cell_struct_acc( const int nlon, const int nlat, const Grid_config
             grid_cells->lon_vertices[:ncells*MAX_V], \
             grid_cells->lat_vertices[:ncells*MAX_V])
 
-#pragma omp target data map(present,alloc:grid_cells[:1],lon[:npts],lat[:npts])
+#pragma omp target data map(present:lon[:npts],lat[:npts],grid_cells[:1],\
+                            grid_cells->lon_min[:ncells], \
+                            grid_cells->lon_max[:ncells],grid_cells->lat_min[:ncells], \
+                            grid_cells->lat_max[:ncells],grid_cells->lon_cent[:ncells],\
+                            grid_cells->nvertices[:ncells],grid_cells->area[:ncells],  \
+                            grid_cells->lon_vertices[:ncells*MAX_V],\
+                            grid_cells->lat_vertices[:ncells*MAX_V])
 #pragma omp target teams loop order(concurrent)
   for(int icell=0; icell<ncells; icell++){
     int nvertices;
