@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
+#include <omp.h>
 #include "general_utils_acc.h"
 #include "globals_acc.h"
 

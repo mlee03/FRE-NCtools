@@ -19,7 +19,13 @@
 #***********************************************************************
 noinst_LIBRARIES = libfrencutils_acc.a
 
+if ENABLE_OMP
+AM_CFLAGS = $(NETCDF_CFLAGS) -I$(top_srcdir)/tools/libfrencutils -fopenmp
+endif
+
+if ENABLE_ACC
 AM_CFLAGS = $(NETCDF_CFLAGS) -I$(top_srcdir)/tools/libfrencutils -mp=gpu
+endif
 
 libfrencutils_acc_a_SOURCES = create_xgrid_acc.c \
                               create_xgrid_acc.h \

@@ -19,9 +19,19 @@
 #***********************************************************************
 bin_PROGRAMS = fregrid_acc
 
+if ENABLE_OMP
+AM_CFLAGS = -I$(top_srcdir)/tools/libfrencutils $(NETCDF_CFLAGS) \
+            -I$(top_srcdir)/tools/libfrencutils_acc \
+            -I$(top_srcdir)/tools/fregrid -fopenmp
+endif
+
+if ENABLE_ACC
 AM_CFLAGS = -I$(top_srcdir)/tools/libfrencutils $(NETCDF_CFLAGS) \
             -I$(top_srcdir)/tools/libfrencutils_acc \
             -I$(top_srcdir)/tools/fregrid -mp=gpu
+endif
+
+
 LDADD = $(NETCDF_LDFLAGS) $(NETCDF_LIBS) $(RPATH_FLAGS)
 
 fregrid_acc_SOURCES = conserve_interp_acc.c \

@@ -85,7 +85,7 @@ void get_input_grid_mask_acc(const int mask_size, double **input_grid_mask)
 
 
 #pragma omp target enter data map(alloc:p_input_grid_mask[:mask_size])
-#pragma omp target teams loop order(concurrent) map(present,alloc:p_input_grid_mask[:mask_size])
+#pragma omp target teams distribute parallel for //map(present,alloc:p_input_grid_mask[:mask_size])
   for( int i=0 ; i<mask_size; i++) p_input_grid_mask[i]=1.0;
 
 }

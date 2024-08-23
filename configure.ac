@@ -91,6 +91,12 @@ AC_ARG_ENABLE([omp],
 AS_IF([test ${enable_omp:-no} = "yes"], [enable_omp=yes], [enable_omp=no])
 AM_CONDITIONAL([ENABLE_OMP], [test $enable_omp = "yes"])
 
+#Build with Openacc suport.  Default is 'no'
+AC_ARG_ENABLE([acc],
+  [AS_HELP_STRING([--enable-acc], [Build with Openacc support.  Defaults to 'no'])] )
+AS_IF([test ${enable_acc:-no} = "yes"], [enable_acc=yes], [enable_acc=no])
+AM_CONDITIONAL([ENABLE_ACC], [test $enable_acc = "yes"])
+
 AC_CHECK_FUNCS(gettid, [], [])
 
 # Check if Fortran compiler has Cray pointer support
