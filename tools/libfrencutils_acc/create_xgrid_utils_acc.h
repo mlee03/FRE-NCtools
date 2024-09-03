@@ -53,10 +53,10 @@ void free_grid_cell_struct_acc( const int ncells, Grid_cells_struct_config *grid
 void get_cell_vertices_acc( const int ij, const int nlon, const double *lon, const double *lat, double *x, double *y );
 
 void create_upbound_nxcells_arrays_on_device_acc(const int n, int **approx_nxcells_per_ij1,
-                                                 int **ij2_start, int **ij2_end);
+                                                 int **i2_start, int **i2_end, int **j2_start, int **j2_end);
 
 void free_upbound_nxcells_arrays_acc( const int n, int **approx_nxcells_per_ij1,
-                                              int **ij2_start, int **ij2_end);
+                                      int **i2_start, int **i2_end, int **j2_start, int **j2_end);
 
 void copy_data_to_xgrid_on_device_acc(const int nxcells, const int input_ncells, const int upbound_nxcells,
                                       int *xcells_per_ij1, double *xcell_clon, double *xcell_clat,

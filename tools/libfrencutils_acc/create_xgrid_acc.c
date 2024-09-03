@@ -36,9 +36,8 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
                                   const int jlat_overlap_starts, const int jlat_overlap_ends,
                                   const double *input_grid_lon, const double *input_grid_lat,
                                   const double *output_grid_lon, const double *output_grid_lat,
-                                  const double *skip_input_cells,
-                                  const Grid_cells_struct_config *output_grid_cells,
-                                  int *approx_xcells_per_ij1, int *ij2_start, int *ij2_end)
+                                  const double *skip_input_cells, const Grid_cells_struct_config *output_grid_cells,
+                                  int *approx_xcells_per_ij1, int *i2_start, int *i2_end, int *j2_start, int *j2_end)
 {
 
   int input_grid_ncells  = nlon_input_cells*nlat_input_cells;
@@ -50,24 +49,21 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
   int ij1_end = (jlat_overlap_ends+1)*nlon_input_cells;
   int upbound_nxcells=0;
 
-#pragma acc data present(output_grid_lon[:output_grid_npts],  \
-                         output_grid_lat[:output_grid_npts],  \
-                         input_grid_lon[:input_grid_npts],   \
-                         input_grid_lat[:input_grid_npts],          \
-                         output_grid_cells[:1],                     \
-                         approx_xcells_per_ij1[:input_grid_ncells], \
-                         ij2_start[:input_grid_ncells],             \
-                         ij2_end[:input_grid_ncells],               \
+#pragma acc data present(output_grid_lon[:output_grid_npts],            \
+                         output_grid_lat[:output_grid_npts],            \
+                         input_grid_lon[:input_grid_npts],              \
+                         input_grid_lat[:input_grid_npts],              \
+                         output_grid_cells[:1],                         \
+                         approx_xcells_per_ij1[:input_grid_ncells],     \
+                         i2_start[:input_grid_ncells], i2_end[:input_grid_ncells], \
+                         j2_start[:input_grid_ncells], j2_end[:input_grid_ncells], \
                          skip_input_cells[:input_grid_ncells])
-#pragma acc data copyin(input_grid_ncells, \
-                        output_grid_ncells)
-#pragma acc data copy(upbound_nxcells)
 #pragma acc parallel loop independent reduction(+:upbound_nxcells)
   for( int ij1=ij1_start ; ij1<ij1_end ; ij1++) {
     if( skip_input_cells[ij1] > MASK_THRESH ) {
 
       int i_approx_xcells_per_ij1=0;
-      int ij2_min=output_grid_ncells, ij2_max=0;
+      int i2_min=nlon_output_cells, j2_min=nlat_output_cells, i2_max=0, j2_max=0;
       double input_cell_lon_vertices[MV], input_cell_lat_vertices[MV];
 
       get_cell_vertices_acc(ij1, nlon_input_cells, input_grid_lon, input_grid_lat,
@@ -75,7 +71,7 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
 
       double input_cell_lat_min = minval_double_acc(4, input_cell_lat_vertices);
       double input_cell_lat_max = maxval_double_acc(4, input_cell_lat_vertices);
-      int nvertices = fix_lon_acc(input_cell_lon_vertices, input_cell_lat_vertices, 4, M_PI);
+      int    nvertices = fix_lon_acc(input_cell_lon_vertices, input_cell_lat_vertices, 4, M_PI);
       double input_cell_lon_min = minval_double_acc(nvertices, input_cell_lon_vertices);
       double input_cell_lon_max = maxval_double_acc(nvertices, input_cell_lon_vertices);
       double input_cell_lon_cent = avgval_double_acc(nvertices, input_cell_lon_vertices);
@@ -83,42 +79,51 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
       approx_xcells_per_ij1[ij1]=0;
 
 #pragma acc loop independent reduction(+:upbound_nxcells) reduction(+:i_approx_xcells_per_ij1) \
-                             reduction(min:ij2_min) reduction(max:ij2_max)
+  reduction(min:i2_min) reduction(max:i2_max) reduction(min:j2_min) reduction(max:j2_max)
+      for(int ij2=0 ; ij2<output_grid_ncells; ij2++) {
+      //for(int j2=0 ; j2<nlat_output_cells; j2++) {
+      //  for(int i2=0 ; i2<nlon_output_cells; i2++) {
 
-      for(int ij2=0; ij2<output_grid_ncells; ij2++) {
+          double dlon_cent, output_cell_lon_min, output_cell_lon_max;
+          double rotate=0.0;
+          int i2, j2;
 
-        double dlon_cent, output_cell_lon_min, output_cell_lon_max;
-        double rotate=0.0;
+          //int ij2 = j2*nlon_output_cells + i2;
 
-        if(output_grid_cells->lat_min[ij2] >= input_cell_lat_max) continue;
-        if(output_grid_cells->lat_max[ij2] <= input_cell_lat_min) continue;
+          if(output_grid_cells->lat_min[ij2] >= input_cell_lat_max) continue;
+          if(output_grid_cells->lat_max[ij2] <= input_cell_lat_min) continue;
 
-        dlon_cent = output_grid_cells->lon_cent[ij2] - input_cell_lon_cent;
-        if(dlon_cent < -M_PI) rotate = +TPI;
-        if(dlon_cent > M_PI)  rotate = -TPI;
+          dlon_cent = output_grid_cells->lon_cent[ij2] - input_cell_lon_cent;
+          if(dlon_cent < -M_PI) rotate = +TPI;
+          if(dlon_cent > M_PI)  rotate = -TPI;
 
-        // adjust according to input_grid_lon_cent
-        // TODO: breakup grid into quadrants to avoid if statements?
-        output_cell_lon_min = output_grid_cells->lon_min[ij2] + rotate;
-        output_cell_lon_max = output_grid_cells->lon_max[ij2] + rotate;
+          // adjust according to input_grid_lon_cent
+          // TODO: breakup grid into quadrants to avoid if statements?
+          output_cell_lon_min = output_grid_cells->lon_min[ij2] + rotate;
+          output_cell_lon_max = output_grid_cells->lon_max[ij2] + rotate;
 
-        //output_cell_lon should in the same range as input_cell_lon after lon_fix,
-        // so no need to consider cyclic condition
-        if(output_cell_lon_min >= input_cell_lon_max ) continue;
-        if(output_cell_lon_max <= input_cell_lon_min ) continue;
+          //output_cell_lon should in the same range as input_cell_lon after lon_fix,
+          // so no need to consider cyclic condition
+          if(output_cell_lon_min >= input_cell_lon_max ) continue;
+          if(output_cell_lon_max <= input_cell_lon_min ) continue;
 
-        //Note, the check for AREA_RATIO_THRESH has been removed
-        //Thus, the computed value of upbound_nxcells will be equal to or greater than nxgrid
-        i_approx_xcells_per_ij1++;
-        upbound_nxcells++;
-        ij2_min = min(ij2_min, ij2);
-        ij2_max = max(ij2_max, ij2);
-
-      } //ij2
+          //Note, the check for AREA_RATIO_THRESH has been removed
+          //Thus, the computed value of upbound_nxcells will be equal to or greater than nxgrid
+          i_approx_xcells_per_ij1++;
+          upbound_nxcells++;
+          j2 = ij2/nlon_output_cells;
+          i2 = ij2%nlon_output_cells;
+          i2_min = min(i2_min, i2);
+          j2_min = min(j2_min, j2);
+          i2_max = max(i2_max, i2);
+          j2_max = max(j2_max, j2);
+        } //ij2
+      //}
       approx_xcells_per_ij1[ij1] = i_approx_xcells_per_ij1;
-      ij2_start[ij1] = ij2_min ;
-      ij2_end[ij1]   = ij2_max;
-
+      i2_start[ij1] = i2_min ;
+      i2_end[ij1]   = i2_max;
+      j2_start[ij1] = j2_min;
+      j2_end[ij1]   = j2_max;
     } //mask
   } //ij1
 
@@ -138,8 +143,8 @@ int create_xgrid_2dx2d_order1_acc(const int nlon_input_cells,  const int nlat_in
                                   const double *input_grid_lon,  const double *input_grid_lat,
                                   const double *output_grid_lon, const double *output_grid_lat,
                                   const int upbound_nxcells, const double *mask_input_grid,
-                                  const Grid_cells_struct_config *output_grid_cells,
-                                  int *approx_nxcells_per_ij1, int *ij2_start, int *ij2_end,
+                                  const Grid_cells_struct_config *output_grid_cells, int *approx_nxcells_per_ij1,
+                                  int *i2_start, int *i2_end, int *j2_start, int *j2_end,
                                   Interp_per_input_tile *interp_for_itile)
 {
 
@@ -173,15 +178,14 @@ int create_xgrid_2dx2d_order1_acc(const int nlon_input_cells,  const int nlat_in
                          input_grid_lat[:input_grid_npts],           \
                          output_grid_cells[:1],                      \
                          approx_nxcells_per_ij1[:input_grid_ncells], \
-                         ij2_start[:input_grid_ncells],              \
-                         ij2_end[:input_grid_ncells],                \
+                         i2_start[:input_grid_ncells], i2_end[:input_grid_ncells], \
+                         j2_start[:input_grid_ncells], j2_end[:input_grid_ncells], \
                          mask_input_grid[:input_grid_ncells],        \
                          nxcells_per_ij1[:input_grid_ncells],        \
                          parent_input_index[:upbound_nxcells],       \
                          parent_output_index[:upbound_nxcells],      \
                          store_xcell_area[:upbound_nxcells])         \
-  copyin(input_grid_ncells, output_grid_ncells)                      \
-  copy(nxcells)
+  copyin(input_grid_ncells, output_grid_ncells) copy(nxcells)
 #pragma acc parallel loop reduction(+:nxcells)
   for(int ij1=ij1_start; ij1<ij1_end; ij1++) {
     if(mask_input_grid[ij1] > MASK_THRESH)  {
@@ -204,50 +208,54 @@ int create_xgrid_2dx2d_order1_acc(const int nlon_input_cells,  const int nlat_in
       nxcells_per_ij1[ij1]=0;
 
 #pragma acc loop seq reduction(+:ixcell)
-      for(int ij2=ij2_start[ij1]; ij2<=ij2_end[ij1]; ij2++) {
+      for( int j2=j2_start[ij1]; j2<=j2_end[ij1]; j2++) {
+        for(int i2=i2_start[ij1]; i2<=i2_end[ij1]; i2++) {
 
-        int nvertices2, xvertices=1;
-        double dlon_cent, output_cell_lon_min, output_cell_lon_max, output_cell_area;
-        double output_cell_lon_vertices[MAX_V], output_cell_lat_vertices[MAX_V];
-        double xcell_lon_vertices[MV], xcell_lat_vertices[MV];
+          int nvertices2, xvertices=1;
+          double dlon_cent, output_cell_lon_min, output_cell_lon_max, output_cell_area;
+          double output_cell_lon_vertices[MAX_V], output_cell_lat_vertices[MAX_V];
+          double xcell_lon_vertices[MV], xcell_lat_vertices[MV];
 
-        double rotate=0.0;
+          double rotate=0.0;
 
-        if(output_grid_cells->lat_min[ij2] >= input_cell_lat_max) continue;
-        if(output_grid_cells->lat_max[ij2] <= input_cell_lat_min) continue;
+          int ij2 = j2*nlon_output_cells + i2;
 
-        /* adjust according to input_grid_lon_cent*/
-        output_cell_lon_min = output_grid_cells->lon_min[ij2];
-        output_cell_lon_max = output_grid_cells->lon_max[ij2];
-        nvertices2 = output_grid_cells->nvertices[ij2];
-        output_cell_area = output_grid_cells->area[ij2];
+          if(output_grid_cells->lat_min[ij2] >= input_cell_lat_max) continue;
+          if(output_grid_cells->lat_max[ij2] <= input_cell_lat_min) continue;
 
-        dlon_cent = output_grid_cells->lon_cent[ij2] - input_cell_lon_cent;
+          /* adjust according to input_grid_lon_cent*/
+          output_cell_lon_min = output_grid_cells->lon_min[ij2];
+          output_cell_lon_max = output_grid_cells->lon_max[ij2];
+          nvertices2 = output_grid_cells->nvertices[ij2];
+          output_cell_area = output_grid_cells->area[ij2];
 
-        if(dlon_cent < -M_PI) rotate = TPI;
-        if(dlon_cent > M_PI)  rotate = -TPI;
+          dlon_cent = output_grid_cells->lon_cent[ij2] - input_cell_lon_cent;
 
-        output_cell_lon_min += rotate;
-        output_cell_lon_max += rotate;
-        for (int l=0; l<nvertices2; l++) {
-          output_cell_lon_vertices[l] = output_grid_cells->lon_vertices[ij2][l] + rotate;
-          output_cell_lat_vertices[l] = output_grid_cells->lat_vertices[ij2][l];
-        }
+          if(dlon_cent < -M_PI) rotate = TPI;
+          if(dlon_cent > M_PI)  rotate = -TPI;
 
-        //output_cell_lon should in the same range as input_cell_lon after lon_fix,
-        // so no need to consider cyclic condition
-        if(output_cell_lon_min >= input_cell_lon_max ) continue;
-        if(output_cell_lon_max <= input_cell_lon_min ) continue;
+          output_cell_lon_min += rotate;
+          output_cell_lon_max += rotate;
+          for (int l=0; l<nvertices2; l++) {
+            output_cell_lon_vertices[l] = output_grid_cells->lon_vertices[ij2][l] + rotate;
+            output_cell_lat_vertices[l] = output_grid_cells->lat_vertices[ij2][l];
+          }
 
-        if ( (xvertices = clip_2dx2d_acc( input_cell_lon_vertices, input_cell_lat_vertices, nvertices1,
-                                          output_cell_lon_vertices, output_cell_lat_vertices, nvertices2,
-                                          xcell_lon_vertices, xcell_lat_vertices)) > 0 ){
-          double xcell_area = poly_area_acc(xcell_lon_vertices, xcell_lat_vertices, xvertices);
-          if( xcell_area/min(input_cell_area, output_cell_area) > AREA_RATIO_THRESH ) {
-            store_xcell_area[approx_nxcells_b4_ij1+ixcell] = xcell_area;
-            parent_input_index[approx_nxcells_b4_ij1+ixcell]  = ij1;
-            parent_output_index[approx_nxcells_b4_ij1+ixcell] = ij2;
-            ixcell++;
+          //output_cell_lon should in the same range as input_cell_lon after lon_fix,
+          // so no need to consider cyclic condition
+          if(output_cell_lon_min >= input_cell_lon_max ) continue;
+          if(output_cell_lon_max <= input_cell_lon_min ) continue;
+
+          if ( (xvertices = clip_2dx2d_acc( input_cell_lon_vertices, input_cell_lat_vertices, nvertices1,
+                                            output_cell_lon_vertices, output_cell_lat_vertices, nvertices2,
+                                            xcell_lon_vertices, xcell_lat_vertices)) > 0 ){
+            double xcell_area = poly_area_acc(xcell_lon_vertices, xcell_lat_vertices, xvertices);
+            if( xcell_area/min(input_cell_area, output_cell_area) > AREA_RATIO_THRESH ) {
+              store_xcell_area[approx_nxcells_b4_ij1+ixcell] = xcell_area;
+              parent_input_index[approx_nxcells_b4_ij1+ixcell]  = ij1;
+              parent_output_index[approx_nxcells_b4_ij1+ixcell] = ij2;
+              ixcell++;
+            }
           }
         }
       }
@@ -286,8 +294,8 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_input_cells,  const int nlat_in
                                   const double *input_grid_lon,  const double *input_grid_lat,
                                   const double *output_grid_lon, const double *output_grid_lat,
                                   const int upbound_nxcells, const double *mask_input_grid,
-                                  const Grid_cells_struct_config *output_grid_cells,
-                                  int *approx_nxcells_per_ij1, int *ij2_start, int *ij2_end,
+                                  const Grid_cells_struct_config *output_grid_cells, int *approx_nxcells_per_ij1,
+                                  int *i2_start, int *i2_end, int *j2_start, int *j2_end,
                                   Interp_per_input_tile *interp_for_itile, double *readin_input_area)
 {
 
@@ -330,8 +338,8 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_input_cells,  const int nlat_in
                          input_grid_lat[:input_grid_npts],           \
                          output_grid_cells[:1],                      \
                          approx_nxcells_per_ij1[:input_grid_ncells], \
-                         ij2_start[:input_grid_ncells],              \
-                         ij2_end[:input_grid_ncells],                \
+                         i2_start[:input_grid_ncells], i2_end[:input_grid_ncells], \
+                         j2_start[:input_grid_ncells], j2_end[:input_grid_ncells], \
                          mask_input_grid[:input_grid_ncells],        \
                          nxcells_per_ij1[:input_grid_ncells],        \
                          parent_input_index[:upbound_nxcells],       \
@@ -366,57 +374,61 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_input_cells,  const int nlat_in
 #pragma acc loop seq reduction(+:ixcell)                \
                      reduction(+:summed_input_area_ij1) \
                      reduction(+:summed_input_clon_ij1) \
-                     reduction(+:summed_input_clat_ij1)
-      for(int ij2=ij2_start[ij1]; ij2<=ij2_end[ij1]; ij2++) {
+                     reduction(+:summed_input_clat_ij1) collapse(2)
+      for(int j2=j2_start[ij1] ; j2<=j2_end[ij1] ; j2++) {
+        for(int i2=i2_start[ij1] ; i2<=i2_end[ij1] ; i2++) {
 
-        int nvertices2, xvertices=1;
-        double dlon_cent, output_cell_lon_min, output_cell_lon_max;
-        double output_cell_lon_vertices[MAX_V], output_cell_lat_vertices[MAX_V];
-        double output_cell_area;
-        double xcell_lon_vertices[MV], xcell_lat_vertices[MV];
+          int nvertices2, xvertices=1;
+          double dlon_cent, output_cell_lon_min, output_cell_lon_max;
+          double output_cell_lon_vertices[MAX_V], output_cell_lat_vertices[MAX_V];
+          double output_cell_area;
+          double xcell_lon_vertices[MV], xcell_lat_vertices[MV];
 
-        double rotate=0.0;
+          double rotate=0.0;
 
-        if(output_grid_cells->lat_min[ij2] >= input_cell_lat_max) continue;
-        if(output_grid_cells->lat_max[ij2] <= input_cell_lat_min) continue;
+          int ij2 = j2*nlon_output_cells + i2;
 
-        dlon_cent = output_grid_cells->lon_cent[ij2] - input_cell_lon_cent;
-        if(dlon_cent < -M_PI) rotate = TPI;
-        if(dlon_cent > M_PI)  rotate = -TPI;
+          if(output_grid_cells->lat_min[ij2] >= input_cell_lat_max) continue;
+          if(output_grid_cells->lat_max[ij2] <= input_cell_lat_min) continue;
 
-        /* adjust according to input_grid_lon_cent*/
-        output_cell_lon_min = output_grid_cells->lon_min[ij2] + rotate;
-        output_cell_lon_max = output_grid_cells->lon_max[ij2] + rotate;
-        nvertices2 = output_grid_cells->nvertices[ij2];
-        output_cell_area = output_grid_cells->area[ij2];
+          dlon_cent = output_grid_cells->lon_cent[ij2] - input_cell_lon_cent;
+          if(dlon_cent < -M_PI) rotate = TPI;
+          if(dlon_cent > M_PI)  rotate = -TPI;
 
-        for (int l=0; l<nvertices2; l++) {
-          output_cell_lon_vertices[l] = output_grid_cells->lon_vertices[ij2][l] + rotate;
-          output_cell_lat_vertices[l] = output_grid_cells->lat_vertices[ij2][l];
-        }
+          /* adjust according to input_grid_lon_cent*/
+          output_cell_lon_min = output_grid_cells->lon_min[ij2] + rotate;
+          output_cell_lon_max = output_grid_cells->lon_max[ij2] + rotate;
+          nvertices2 = output_grid_cells->nvertices[ij2];
+          output_cell_area = output_grid_cells->area[ij2];
 
-        //output_cell_lon should in the same range as input_cell_lon after lon_fix,
-        // so no need to consider cyclic condition
-        if(output_cell_lon_min >= input_cell_lon_max ) continue;
-        if(output_cell_lon_max <= input_cell_lon_min ) continue;
+          for (int l=0; l<nvertices2; l++) {
+            output_cell_lon_vertices[l] = output_grid_cells->lon_vertices[ij2][l] + rotate;
+            output_cell_lat_vertices[l] = output_grid_cells->lat_vertices[ij2][l];
+          }
 
-        if ( (xvertices = clip_2dx2d_acc( input_cell_lon_vertices, input_cell_lat_vertices, nvertices1,
-                                          output_cell_lon_vertices, output_cell_lat_vertices, nvertices2,
-                                          xcell_lon_vertices, xcell_lat_vertices)) > 0 ){
-          double xcell_area = poly_area_acc(xcell_lon_vertices, xcell_lat_vertices, xvertices);
-          if( xcell_area/min(input_cell_area, output_cell_area) > AREA_RATIO_THRESH ) {
-            double xcell_clon, xcell_clat;
-            store_xcell_area[approx_nxcells_b4_ij1+ixcell] = xcell_area;
-            parent_input_index[approx_nxcells_b4_ij1+ixcell]  = ij1;
-            parent_output_index[approx_nxcells_b4_ij1+ixcell] = ij2;
-            poly_ctrlon_acc(xcell_lon_vertices, xcell_lat_vertices, xvertices, input_cell_lon_cent, &xcell_clon);
-            poly_ctrlat_acc(xcell_lon_vertices, xcell_lat_vertices, xvertices, &xcell_clat);
-            store_xcell_dclon[approx_nxcells_b4_ij1+ixcell] = xcell_clon/xcell_area;
-            store_xcell_dclat[approx_nxcells_b4_ij1+ixcell] = xcell_clat/xcell_area;
-            summed_input_area_ij1 += xcell_area;
-            summed_input_clon_ij1 += xcell_clon;
-            summed_input_clat_ij1 += xcell_clat;
-            ixcell++;
+          //output_cell_lon should in the same range as input_cell_lon after lon_fix,
+          // so no need to consider cyclic condition
+          if(output_cell_lon_min >= input_cell_lon_max ) continue;
+          if(output_cell_lon_max <= input_cell_lon_min ) continue;
+
+          if ( (xvertices = clip_2dx2d_acc( input_cell_lon_vertices, input_cell_lat_vertices, nvertices1,
+                                            output_cell_lon_vertices, output_cell_lat_vertices, nvertices2,
+                                            xcell_lon_vertices, xcell_lat_vertices)) > 0 ){
+            double xcell_area = poly_area_acc(xcell_lon_vertices, xcell_lat_vertices, xvertices);
+            if( xcell_area/min(input_cell_area, output_cell_area) > AREA_RATIO_THRESH ) {
+              double xcell_clon, xcell_clat;
+              store_xcell_area[approx_nxcells_b4_ij1+ixcell] = xcell_area;
+              parent_input_index[approx_nxcells_b4_ij1+ixcell]  = ij1;
+              parent_output_index[approx_nxcells_b4_ij1+ixcell] = ij2;
+              poly_ctrlon_acc(xcell_lon_vertices, xcell_lat_vertices, xvertices, input_cell_lon_cent, &xcell_clon);
+              poly_ctrlat_acc(xcell_lon_vertices, xcell_lat_vertices, xvertices, &xcell_clat);
+              store_xcell_dclon[approx_nxcells_b4_ij1+ixcell] = xcell_clon/xcell_area;
+              store_xcell_dclat[approx_nxcells_b4_ij1+ixcell] = xcell_clat/xcell_area;
+              summed_input_area_ij1 += xcell_area;
+              summed_input_clon_ij1 += xcell_clon;
+              summed_input_clat_ij1 += xcell_clat;
+              ixcell++;
+            }
           }
         }
       }

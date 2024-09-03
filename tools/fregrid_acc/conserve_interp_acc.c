@@ -69,7 +69,7 @@ void setup_conserve_interp_acc(int ntiles_input_grid, Grid_config *input_grid, i
       int ncells_input_grid = nlon_input_cells * nlat_input_cells;
       int ngridpts_input_grid = (nlon_input_cells+1)*(nlat_input_cells+1);
       int jlat_overlap_starts=0, jlat_overlap_ends=0, nxcells=0, upbound_nxcells=0;
-      int *approx_nxcells_per_ij1=NULL, *ij2_start=NULL, *ij2_end=NULL;
+      int *approx_nxcells_per_ij1=NULL, *i2_start=NULL, *i2_end=NULL, *j2_start=NULL, *j2_end=NULL;
       double *input_grid_mask=NULL;
 
       copy_grid_to_device_acc(ngridpts_input_grid, input_grid[itile].latc, input_grid[itile].lonc);
@@ -80,16 +80,16 @@ void setup_conserve_interp_acc(int ntiles_input_grid, Grid_config *input_grid, i
       get_bounding_indices_acc(nlon_output_cells, nlat_output_cells, nlon_input_cells, nlat_input_cells,
                                output_grid[otile].latc, input_grid[itile].latc, &jlat_overlap_starts, &jlat_overlap_ends);
 
-      create_upbound_nxcells_arrays_on_device_acc( ncells_input_grid, &approx_nxcells_per_ij1, &ij2_start, &ij2_end);
+      create_upbound_nxcells_arrays_on_device_acc( ncells_input_grid, &approx_nxcells_per_ij1,
+                                                   &i2_start, &i2_end, &j2_start, &j2_end);
 
       upbound_nxcells = get_upbound_nxcells_2dx2d_acc( nlon_input_cells, nlat_input_cells,
                                                        nlon_output_cells, nlat_output_cells,
                                                        jlat_overlap_starts, jlat_overlap_ends,
                                                        input_grid[itile].lonc, input_grid[itile].latc,
                                                        output_grid[otile].lonc, output_grid[otile].latc,
-                                                       input_grid_mask,
-                                                       &output_grid_cells,
-                                                       approx_nxcells_per_ij1, ij2_start, ij2_end);
+                                                       input_grid_mask, &output_grid_cells, approx_nxcells_per_ij1,
+                                                       i2_start, i2_end, j2_start, j2_end);
 
       if(opcode & GREAT_CIRCLE) {
         printf("GREAT_CIRCLE HAS NOT BEEN IMPLEMENTED YET\n");
@@ -103,11 +103,8 @@ void setup_conserve_interp_acc(int ntiles_input_grid, Grid_config *input_grid, i
                                                   jlat_overlap_starts, jlat_overlap_ends,
                                                   input_grid[itile].lonc, input_grid[itile].latc,
                                                   output_grid[otile].lonc, output_grid[otile].latc,
-                                                  upbound_nxcells,
-                                                  input_grid_mask,
-                                                  &output_grid_cells,
-                                                  approx_nxcells_per_ij1, ij2_start, ij2_end,
-                                                  interp_acc[otile].input_tile+itile);
+                                                  upbound_nxcells, input_grid_mask, &output_grid_cells, approx_nxcells_per_ij1,
+                                                  i2_start, i2_end,j2_start, j2_end, interp_acc[otile].input_tile+itile);
           interp_acc[otile].nxcells+=nxcells;
         }
         else if(opcode & CONSERVE_ORDER2) {
@@ -116,17 +113,14 @@ void setup_conserve_interp_acc(int ntiles_input_grid, Grid_config *input_grid, i
                                                   jlat_overlap_starts, jlat_overlap_ends,
                                                   input_grid[itile].lonc, input_grid[itile].latc,
                                                   output_grid[otile].lonc, output_grid[otile].latc,
-                                                  upbound_nxcells,
-                                                  input_grid_mask,
-                                                  &output_grid_cells,
-                                                  approx_nxcells_per_ij1, ij2_start, ij2_end,
-                                                  interp_acc[otile].input_tile+itile, input_grid[itile].cell_area);
+                                                  upbound_nxcells, input_grid_mask, &output_grid_cells, approx_nxcells_per_ij1,
+                                                  i2_start, i2_end, j2_start, j2_end, interp_acc[otile].input_tile+itile, input_grid[itile].cell_area);
           interp_acc[otile].nxcells+=nxcells;
         }
         else mpp_error("conserve_interp: interp_method should be CONSERVE_ORDER1 or CONSERVE_ORDER2");
       } //conserve_order methods
 
-      free_upbound_nxcells_arrays_acc(ncells_input_grid, &approx_nxcells_per_ij1, &ij2_start, &ij2_end);
+      free_upbound_nxcells_arrays_acc(ncells_input_grid, &approx_nxcells_per_ij1, &i2_start, &i2_end, &j2_start, &j2_end);
       free_input_grid_mask_acc(ncells_input_grid, &input_grid_mask);
       delete_grid_from_device_acc(ngridpts_input_grid, input_grid[itile].lonc, input_grid[itile].latc);
 

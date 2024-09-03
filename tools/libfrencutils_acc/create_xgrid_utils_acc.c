@@ -763,45 +763,53 @@ void get_cell_vertices_acc( const int icell, const int nlon, const double *lon, 
 }
 
 void create_upbound_nxcells_arrays_on_device_acc(const int n, int **approx_nxcells_per_ij1,
-                                                 int **ij2_start, int **ij2_end)
+                                                 int **i2_start, int **i2_end, int **j2_start, int **j2_end)
 {
 
   int *p_approx_nxcells_per_ij1;
-  int *p_ij2_start;
-  int *p_ij2_end;
+  int *p_i2_start, *p_i2_end;
+  int *p_j2_start, *p_j2_end;
 
   *approx_nxcells_per_ij1 = (int *)malloc(n*sizeof(int));
-  *ij2_start = (int *)malloc(n*sizeof(int));
-  *ij2_end = (int *)malloc(n*sizeof(int));
+  *i2_start = (int *)malloc(n*sizeof(int));
+  *i2_end = (int *)malloc(n*sizeof(int));
+  *j2_start = (int *)malloc(n*sizeof(int));
+  *j2_end = (int *)malloc(n*sizeof(int));
 
   p_approx_nxcells_per_ij1 = *approx_nxcells_per_ij1;
-  p_ij2_start = *ij2_start;
-  p_ij2_end = *ij2_end;
+  p_i2_start = *i2_start;
+  p_i2_end = *i2_end;
+  p_j2_start = *j2_start;
+  p_j2_end = *j2_end;
 
 #pragma acc enter data copyin(p_approx_nxcells_per_ij1[:n],   \
-                              p_ij2_start[:n],                \
-                              p_ij2_end[:n])
+                              p_i2_start[:n], p_i2_end[:n],   \
+                              p_j2_start[:n], p_j2_end[:n])
 
 }
 
 void free_upbound_nxcells_arrays_acc( const int n, int **approx_nxcells_per_ij1,
-                                      int **ij2_start, int **ij2_end)
+                                      int **i2_start, int **i2_end, int **j2_start, int **j2_end)
 {
   int *p_approx_nxcells_per_ij1;
-  int *p_ij2_start ;
-  int *p_ij2_end;
+  int *p_i2_start, *p_i2_end;
+  int *p_j2_start, *p_j2_end;
 
   p_approx_nxcells_per_ij1 = *approx_nxcells_per_ij1;
-  p_ij2_start = *ij2_start;
-  p_ij2_end = *ij2_end;
+  p_i2_start = *i2_start;
+  p_i2_end = *i2_end;
+  p_j2_start = *j2_start;
+  p_j2_end = *j2_end;
 
 #pragma acc exit data delete(p_approx_nxcells_per_ij1[:n],  \
-                             p_ij2_start[:n],               \
-                             p_ij2_end[:n])
+                             p_i2_start[:n], p_i2_end[:n],  \
+                             p_j2_start[:n], p_j2_end[:n])
 
   free(*approx_nxcells_per_ij1); *approx_nxcells_per_ij1 = NULL;
-  free(*ij2_start)             ; *ij2_start = NULL;
-  free(*ij2_end)               ; *ij2_end = NULL;
+  free(*i2_start) ; *i2_start = NULL;
+  free(*i2_end)   ; *i2_end   = NULL;
+  free(*j2_start) ; *j2_start = NULL;
+  free(*j2_end)   ; *j2_end   = NULL;
 }
 
 void copy_data_to_interp_on_device_acc(const int nxcells, const int input_ncells, const int upbound_nxcells,
