@@ -94,8 +94,9 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
         if(output_grid_cells->lat_max[ij2] <= input_cell_lat_min) continue;
 
         dlon_cent = output_grid_cells->lon_cent[ij2] - input_cell_lon_cent;
-        if(dlon_cent < -M_PI) rotate = +TPI;
-        if(dlon_cent > M_PI)  rotate = -TPI;
+        rotate = - (int)(dlon_cent/M_PI) * TPI;
+        //if(dlon_cent < -M_PI) rotate = +TPI;
+        //if(dlon_cent > M_PI)  rotate = -TPI;
 
         // adjust according to input_grid_lon_cent
         // TODO: breakup grid into quadrants to avoid if statements?
