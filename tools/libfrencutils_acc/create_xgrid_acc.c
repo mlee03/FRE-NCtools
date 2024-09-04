@@ -55,15 +55,15 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
                          input_grid_lat[:input_grid_npts],              \
                          output_grid_cells[:1],                         \
                          approx_xcells_per_ij1[:input_grid_ncells],     \
-                         i2_start[:input_grid_ncells], i2_end[:input_grid_ncells], \
                          j2_start[:input_grid_ncells], j2_end[:input_grid_ncells], \
+                         i2_start[:input_grid_ncells], i2_end[:input_grid_ncells], \
                          skip_input_cells[:input_grid_ncells])
 #pragma acc parallel loop independent reduction(+:upbound_nxcells)
   for( int ij1=ij1_start ; ij1<ij1_end ; ij1++) {
     if( skip_input_cells[ij1] > MASK_THRESH ) {
 
       int i_approx_xcells_per_ij1=0;
-      int i2_min=nlon_output_cells, j2_min=nlat_output_cells, i2_max=0, j2_max=0;
+      int i2_min=output_grid_ncells, i2_max=0, j2_min=output_grid_ncells, j2_max=0;
       double input_cell_lon_vertices[MV], input_cell_lat_vertices[MV];
 
       get_cell_vertices_acc(ij1, nlon_input_cells, input_grid_lon, input_grid_lat,
@@ -79,16 +79,14 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
       approx_xcells_per_ij1[ij1]=0;
 
 #pragma acc loop independent reduction(+:upbound_nxcells) reduction(+:i_approx_xcells_per_ij1) \
-  reduction(min:i2_min) reduction(max:i2_max) reduction(min:j2_min) reduction(max:j2_max)
-      for(int ij2=0 ; ij2<output_grid_ncells; ij2++) {
-      //for(int j2=0 ; j2<nlat_output_cells; j2++) {
-      //  for(int i2=0 ; i2<nlon_output_cells; i2++) {
+  reduction(min:j2_min) reduction(max:j2_max) reduction(min:i2_min) reduction(max:i2_max) collapse(2)
+      for(int j2=0; j2<nlat_output_cells; j2++) {
+        for(int i2=0; i2<nlon_output_cells ; i2++) {
 
           double dlon_cent, output_cell_lon_min, output_cell_lon_max;
           double rotate=0.0;
-          int i2, j2;
 
-          //int ij2 = j2*nlon_output_cells + i2;
+          int ij2 = j2*nlon_output_cells + i2;
 
           if(output_grid_cells->lat_min[ij2] >= input_cell_lat_max) continue;
           if(output_grid_cells->lat_max[ij2] <= input_cell_lat_min) continue;
@@ -111,14 +109,12 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
           //Thus, the computed value of upbound_nxcells will be equal to or greater than nxgrid
           i_approx_xcells_per_ij1++;
           upbound_nxcells++;
-          j2 = ij2/nlon_output_cells;
-          i2 = ij2%nlon_output_cells;
-          i2_min = min(i2_min, i2);
-          j2_min = min(j2_min, j2);
-          i2_max = max(i2_max, i2);
-          j2_max = max(j2_max, j2);
-        } //ij2
-      //}
+          i2_min = min(i2, i2_min);
+          i2_max = max(i2, i2_max);
+          j2_min = min(j2, j2_min);
+          j2_max = max(j2, j2_max);
+        } //i2
+      } //j2
       approx_xcells_per_ij1[ij1] = i_approx_xcells_per_ij1;
       i2_start[ij1] = i2_min ;
       i2_end[ij1]   = i2_max;
