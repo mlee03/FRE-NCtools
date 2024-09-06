@@ -672,13 +672,6 @@ void get_grid_cell_struct_acc( const int nlon, const int nlat, const Grid_config
             grid_cells->lon_vertices[:ncells*MAX_V], \
             grid_cells->lat_vertices[:ncells*MAX_V])
 
-  //#pragma omp target data map(present:lon[:npts],lat[:npts],grid_cells[:1], \
-                            grid_cells->lon_min[:ncells], \
-                            grid_cells->lon_max[:ncells],grid_cells->lat_min[:ncells], \
-                            grid_cells->lat_max[:ncells],grid_cells->lon_cent[:ncells],\
-                            grid_cells->nvertices[:ncells],grid_cells->area[:ncells],  \
-                            grid_cells->lon_vertices[:ncells*MAX_V],\
-                            grid_cells->lat_vertices[:ncells*MAX_V])
 #pragma omp target teams distribute parallel for
   for(int icell=0; icell<ncells; icell++){
     int nvertices;
@@ -814,28 +807,21 @@ void copy_data_to_interp_on_device_acc(const int nxcells, const int input_ncells
     }
 
 #pragma omp target enter data map(to:interp_for_input_tile[:1])
-#pragma omp target enter data\
-            map(alloc:interp_for_input_tile->input_parent_cell_index[:nxcells],\
-            interp_for_input_tile->output_parent_cell_index[:nxcells],\
-            interp_for_input_tile->xcell_area[:nxcells])
-#pragma omp target enter data map(alloc:interp_for_input_tile->dcentroid_lon[:nxcells],\
-            interp_for_input_tile->dcentroid_lat[:nxcells]) if(copy_xcentroid)
-    //#pragma omp target data map(present,alloc:xcells_per_ij1[:input_ncells], \
-            approx_xcells_per_ij1[:input_ncells],\
-            parent_input_index[:upbound_nxcells],\
-            parent_output_index[:upbound_nxcells],xcell_areas[:upbound_nxcells],\
-            interp_for_input_tile[:1])
+#pragma omp target enter data map(alloc:interp_for_input_tile->input_parent_cell_index[:nxcells],   \
+                                  interp_for_input_tile->output_parent_cell_index[:nxcells], \
+                                  interp_for_input_tile->xcell_area[:nxcells])
+#pragma omp target enter data map(alloc:interp_for_input_tile->dcentroid_lon[:nxcells], \
+                                  interp_for_input_tile->dcentroid_lat[:nxcells]) if(copy_xcentroid)
 #pragma omp target teams distribute parallel for nowait
     for(int ij1=0 ; ij1<input_ncells ; ij1++) {
       int xcells_before_ij1 = 0, approx_xcells=0 ;
 
-      //#pragma omp loop
       for(int i=1 ; i<=ij1 ; i++) {
         xcells_before_ij1 += xcells_per_ij1[i-1];
         approx_xcells += approx_xcells_per_ij1[i-1];
       }
 
-      //#pragma omp loop
+      //#pragma omp parallel for
       for(int i=0 ; i<xcells_per_ij1[ij1]; i++){
         interp_for_input_tile->input_parent_cell_index[xcells_before_ij1+i]  = parent_input_index[approx_xcells+i];
         interp_for_input_tile->output_parent_cell_index[xcells_before_ij1+i] = parent_output_index[approx_xcells+i];
@@ -844,23 +830,16 @@ void copy_data_to_interp_on_device_acc(const int nxcells, const int input_ncells
     }
 
     if(copy_xcentroid==1) {
-      //#pragma omp target data map(present,alloc:xcells_per_ij1[:input_ncells], \
-            approx_xcells_per_ij1[:input_ncells],\
-            parent_input_index[:upbound_nxcells],\
-            parent_output_index[:upbound_nxcells],xcell_areas[:upbound_nxcells],\
-            interp_for_input_tile[:1],xcell_dclon[:upbound_nxcells],\
-            xcell_dclat[:upbound_nxcells])
 #pragma omp target teams distribute parallel for nowait
       for(int ij1=0 ; ij1<input_ncells ; ij1++) {
         int xcells_before_ij1 = 0, approx_xcells=0 ;
 
-        //#pragma omp loop
         for(int i=1 ; i<=ij1 ; i++) {
           xcells_before_ij1 += xcells_per_ij1[i-1];
           approx_xcells += approx_xcells_per_ij1[i-1];
         }
 
-        //#pragma omp loop
+        //#pragma omp parallel for
         for(int i=0 ; i<xcells_per_ij1[ij1]; i++){
           interp_for_input_tile->dcentroid_lon[xcells_before_ij1+i] = xcell_dclon[approx_xcells+i];
           interp_for_input_tile->dcentroid_lat[xcells_before_ij1+i] = xcell_dclat[approx_xcells+i];

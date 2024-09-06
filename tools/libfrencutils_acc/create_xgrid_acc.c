@@ -51,18 +51,7 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
   int ij1_end = (jlat_overlap_ends+1)*nlon_input_cells;
   int upbound_nxcells=0;
 
-#pragma omp target map(tofrom:upbound_nxcells) map(to: ij1_start, ij1_end)
-#pragma omp teams distribute parallel for reduction(+:upbound_nxcells)
-  //map(present,alloc:output_grid_lon[:output_grid_npts], output_grid_lat[:output_grid_npts], \
-      input_grid_lon[:input_grid_npts], input_grid_lat[:input_grid_npts], \
-      approx_xcells_per_ij1[:input_grid_ncells],ij2_start[:input_grid_ncells], \
-      ij2_end[:input_grid_ncells],skip_input_cells[:input_grid_ncells], \
-      output_grid_cells[:1],                                            \
-      output_grid_cells->lon_min[:output_grid_ncells], output_grid_cells->lon_max[:output_grid_ncells], \
-      output_grid_cells->lat_min[:output_grid_ncells], output_grid_cells->lat_max[:output_grid_ncells], \
-      output_grid_cells->nvertices[:output_grid_ncells], output_grid_cells->area[:output_grid_ncells], \
-      output_grid_cells->lon_cent[:output_grid_ncells], output_grid_cells->lon_vertices[MAX_V*output_grid_ncells],\
-      output_grid_cells->lat_vertices[MAX_V*output_grid_ncells]) map(tofrom:upbound_nxcells)
+#pragma omp target teams distribute reduction(+:upbound_nxcells) map(tofrom:upbound_nxcells)
   for( int ij1=ij1_start ; ij1<ij1_end ; ij1++) {
 
     if( skip_input_cells[ij1] > MASK_THRESH ) {
@@ -83,8 +72,8 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
 
       approx_xcells_per_ij1[ij1]=0;
 
-      //#pragma omp loop reduction(+:upbound_nxcells) reduction(+:i_approx_xcells_per_ij1) \
-      reduction(min:ij2_min) reduction(max:ij2_max)
+#pragma omp parallel for reduction(+:upbound_nxcells) reduction(+:i_approx_xcells_per_ij1) \
+                         reduction(min:ij2_min) reduction(max:ij2_max)
       for(int ij2=0; ij2<output_grid_ncells; ij2++) {
 
         double dlon_cent, output_cell_lon_min, output_cell_lon_max;
@@ -120,8 +109,6 @@ int get_upbound_nxcells_2dx2d_acc(const int nlon_input_cells,  const int nlat_in
 
     } //mask
   } //ij1
-
-  printf("HERE %d\n", upbound_nxcells);
 
   return upbound_nxcells;
 
@@ -165,21 +152,9 @@ int create_xgrid_2dx2d_order1_acc(const int nlon_input_cells,  const int nlat_in
 
 #pragma omp target enter data map(alloc:parent_input_index[:upbound_nxcells], \
                                   parent_output_index[:upbound_nxcells], \
-                                  store_xcell_area[:upbound_nxcells],    \
+                                  store_xcell_area[:upbound_nxcells],   \
                                   nxcells_per_ij1[:input_grid_ncells])
 #pragma omp target teams distribute parallel for reduction(+:nxcells) map(tofrom:nxcells)
-  //map(present,alloc:output_grid_lon[:output_grid_npts], output_grid_lat[:output_grid_npts], \
-      input_grid_lon[:input_grid_npts], input_grid_lat[:input_grid_npts], \
-      approx_nxcells_per_ij1[:input_grid_ncells], ij2_start[:input_grid_ncells], \
-      ij2_end[:input_grid_ncells], mask_input_grid[:input_grid_ncells], \
-      nxcells_per_ij1[:input_grid_ncells], parent_input_index[:upbound_nxcells], \
-      parent_output_index[:upbound_nxcells], store_xcell_area[:upbound_nxcells], \
-      output_grid_cells[:1],                                            \
-      output_grid_cells->lon_min[:output_grid_ncells], output_grid_cells->lon_max[:output_grid_ncells],\
-      output_grid_cells->lat_min[:output_grid_ncells], output_grid_cells->lat_max[:output_grid_ncells],\
-      output_grid_cells->nvertices[:output_grid_ncells], output_grid_cells->area[:output_grid_ncells],\
-      output_grid_cells->lon_cent[:output_grid_ncells], output_grid_cells->lon_vertices[MAX_V*output_grid_ncells],\
-      output_grid_cells->lat_vertices[MAX_V*output_grid_ncells])
   for(int ij1=ij1_start; ij1<ij1_end; ij1++) {
     if(mask_input_grid[ij1] > MASK_THRESH)  {
 
@@ -316,14 +291,6 @@ int create_xgrid_2dx2d_order2_acc(const int nlon_input_cells,  const int nlat_in
             summed_input_clon[:input_grid_ncells],\
             summed_input_clat[:input_grid_ncells])
 
-  //map(present,alloc:output_grid_lon[:output_grid_npts],               \
-  output_grid_lat[:output_grid_npts],input_grid_lon[:input_grid_npts],  \
-  input_grid_lat[:input_grid_npts],output_grid_cells[:1],               \
-  approx_nxcells_per_ij1[:input_grid_ncells],ij2_start[:input_grid_ncells], \
-  ij2_end[:input_grid_ncells],mask_input_grid[:input_grid_ncells],      \
-  nxcells_per_ij1[:input_grid_ncells],parent_input_index[:upbound_nxcells], \
-  parent_output_index[:upbound_nxcells],store_xcell_area[:upbound_nxcells], \
-  store_xcell_dclon[:upbound_nxcells],store_xcell_dclat[:upbound_nxcells])
 #pragma omp target teams distribute parallel for reduction(+:nxcells) map(tofrom:nxcells)
   for(int ij1=ij1_start; ij1<ij1_end; ij1++) {
     if(mask_input_grid[ij1] > MASK_THRESH)  {

@@ -33,9 +33,6 @@
 #include "mpp_io.h"
 #include "read_mosaic.h"
 
-#define min(a,b) (a<b ? a:b)
-#define max(a,b) (a>b ? a:b)
-
 /*******************************************************************************
   void setup_conserve_interp
   Setup the interpolation weight for conservative interpolation
@@ -85,6 +82,7 @@ void setup_conserve_interp_acc(int ntiles_input_grid, Grid_config *input_grid, i
 
       create_upbound_nxcells_arrays_on_device_acc( ncells_input_grid, &approx_nxcells_per_ij1, &ij2_start, &ij2_end);
 
+
       upbound_nxcells = get_upbound_nxcells_2dx2d_acc( nlon_input_cells, nlat_input_cells,
                                                        nlon_output_cells, nlat_output_cells,
                                                        jlat_overlap_starts, jlat_overlap_ends,
@@ -93,6 +91,8 @@ void setup_conserve_interp_acc(int ntiles_input_grid, Grid_config *input_grid, i
                                                        input_grid_mask,
                                                        &output_grid_cells,
                                                        approx_nxcells_per_ij1, ij2_start, ij2_end);
+
+      printf("HERE %d ", upbound_nxcells);
 
       if(opcode & GREAT_CIRCLE) {
         printf("GREAT_CIRCLE HAS NOT BEEN IMPLEMENTED YET\n");
@@ -112,6 +112,8 @@ void setup_conserve_interp_acc(int ntiles_input_grid, Grid_config *input_grid, i
                                                   approx_nxcells_per_ij1, ij2_start, ij2_end,
                                                   interp_acc[otile].input_tile+itile);
           interp_acc[otile].nxcells+=nxcells;
+
+          printf("%d\n", nxcells);
 
         }
         else if(opcode & CONSERVE_ORDER2) {
@@ -239,7 +241,7 @@ void read_remap_file_acc(int ntiles_input_grid, int ntiles_output_grid,
       free(input_lat_index) ; input_lat_index = NULL;
       free(output_lon_index); output_lon_index = NULL;
       free(output_lat_index); output_lat_index = NULL;
-      free(xcell_area); xcell_area = NULL;
+      free(xcell_area)      ; xcell_area = NULL;
       free(xcell_centroid_lon); xcell_centroid_lon = NULL;
       free(xcell_centroid_lat); xcell_centroid_lat = NULL;
 
@@ -302,8 +304,7 @@ void write_remap_file(const int ntiles_output_grid, const int ntiles_input_grid,
                                p_interp_for_itile->output_parent_cell_index[:itile_nxcells],\
                                p_interp_for_itile->xcell_area[:itile_nxcells])
 #pragma omp target update from(p_interp_for_itile->dcentroid_lon[:itile_nxcells],\
-            p_interp_for_itile->dcentroid_lat[:itile_nxcells])\
-            if(opcode&CONSERVE_ORDER2)
+            p_interp_for_itile->dcentroid_lat[:itile_nxcells]) if(opcode&CONSERVE_ORDER2)
     }
 
     //input tile
@@ -490,8 +491,7 @@ void do_scalar_conserve_interp_acc(Interp_config_acc *interp_acc, int varid, int
 #pragma omp target enter data map(alloc:p_fieldout_data[:ncells_output_grid], \
             out_area[:ncells_output_grid],out_miss[:ncells_output_grid])
 
-#pragma omp target teams distribute parallel for  //map(present,alloc:p_fieldout_data[:ncells_output_grid], \
-                                                 out_area[:ncells_output_grid],out_miss[:ncells_output_grid])
+#pragma omp target teams distribute parallel for
     for(int i=0; i<ncells_output_grid; i++) {
       p_fieldout_data[i] = 0.0;
       out_area[i] = 0.0;
@@ -521,10 +521,7 @@ void do_scalar_conserve_interp_acc(Interp_config_acc *interp_acc, int varid, int
     } //itile
 
     if(opcode & CHECK_CONSERVE) {
-#pragma omp target enter data map(to:gsum_out)
-#pragma omp target teams distribute parallel for reduction(+:gsum_out)
-      //map(present,alloc:out_area[:ncells_output_grid],                \
-      p_fieldout_data[:ncells_output_grid])
+#pragma omp target teams distribute parallel for reduction(+:gsum_out) map(to:gsum_out)
       for(int i=0; i<ncells_output_grid; i++) {
         if(out_area[i] > 0) gsum_out += p_fieldout_data[i];
       }
@@ -532,8 +529,6 @@ void do_scalar_conserve_interp_acc(Interp_config_acc *interp_acc, int varid, int
 
     if ( cell_methods == CELL_METHODS_SUM ) {
 #pragma omp target teams distribute parallel for
-      //map(present,alloc:out_area[:ncells_output_grid],                \
-      out_miss[:ncells_output_grid],p_fieldout_data[:ncells_output_grid])
       for(int i=0; i<ncells_output_grid; i++) {
         if(out_area[i] == 0) {
           p_fieldout_data[i] = 0.0;
@@ -543,8 +538,6 @@ void do_scalar_conserve_interp_acc(Interp_config_acc *interp_acc, int varid, int
     }
     else {
 #pragma omp target teams distribute parallel for
-      //map(present,alloc:out_area[:ncells_output_grid],                \
-      out_miss[:ncells_output_grid],p_fieldout_data[:ncells_output_grid])
       for(int i=0; i<ncells_output_grid; i++) {
         if(out_area[i] > 0) {
           p_fieldout_data[i] /= out_area[i];
@@ -556,7 +549,7 @@ void do_scalar_conserve_interp_acc(Interp_config_acc *interp_acc, int varid, int
       }
 
       if( (target_grid) ) {
-#pragma omp target teams distribute parallel for //map(present,alloc:out_area[:ncells_output_grid])
+#pragma omp target teams distribute parallel for
         for(int i=0; i<ncells_output_grid; i++) out_area[i] = 0.0;
 
         for(int itile=0 ; itile<ntiles_input_grid; itile++) {
@@ -565,11 +558,7 @@ void do_scalar_conserve_interp_acc(Interp_config_acc *interp_acc, int varid, int
           double *p_gridin_area  = NULL ; p_gridin_area  = input_grid[itile].cell_area;
           double *p_fieldin_area = NULL ; p_fieldin_area = field_in[itile].area;
           int ixcells = minterp_acc->nxcells;
-#pragma omp target teams distribute parallel for //map(present,                        \
-                              alloc:minterp_acc->output_parent_cell_index[:ixcells], \
-                              minterp_acc->input_parent_cell_index[:ixcells], \
-                              minterp_acc->xcell_area[:ixcells],out_area[:ncells_output_grid]) \
-                              map(to: p_fieldin_area[:ncells_input_grid], p_gridin_area[:ncells_input_grid])
+#pragma omp target teams distribute parallel for
           for(int ix=0; ix<ixcells; ix++) {
             int ij2 = minterp_acc->output_parent_cell_index[ix];
             int ij1 = minterp_acc->input_parent_cell_index[ix];
@@ -577,8 +566,7 @@ void do_scalar_conserve_interp_acc(Interp_config_acc *interp_acc, int varid, int
             if(cell_measures ) out_area[ij2] += (area*p_fieldin_area[ij1]/p_gridin_area[ij1]);
             else out_area[ij2] += area;
           }
-#pragma omp target teams distribute parallel for //map(present,alloc:p_fieldout_data[:ncells_output_grid], \
-                              out_area[:ncells_output_grid], output_grid[otile].cell_area[:ncells_output_grid])
+#pragma omp target teams distribute parallel for
           for(int i=0; i<ncells_output_grid; i++) {
             if(p_fieldout_data[i] != missing)
               p_fieldout_data[i] *=  (out_area[i]/output_grid[otile].cell_area[i]);
@@ -648,25 +636,22 @@ void get_input_area_weight(const int weights_exist, const int cell_measures, con
 
   if(cell_methods == CELL_METHODS_SUM) {
 #pragma omp target teams distribute parallel for map(to:p_gridin_area[:ncells_input_grid])
-    //map(present, alloc:input_area_weight[:ncells_input_grid])
     for(int i=0 ; i<ncells_input_grid ; i++) input_area_weight[i] = 1.0/p_gridin_area[i];
   }
 
   else if(cell_measures) {
 #pragma omp target teams distribute parallel for \
   map(to:p_gridin_area[:ncells_input_grid],p_fieldin_area[:ncells_input_grid])
-    // map(present,alloc:input_area_weight[:ncells_input_grid])
     for(int i=0 ; i<ncells_input_grid ; i++) input_area_weight[i] = p_fieldin_area[i]/p_gridin_area[i];
   }
 
   else {
-#pragma omp target teams distribute parallel for  //map(present,alloc:input_area_weight[:ncells_input_grid])
+#pragma omp target teams distribute parallel for
     for(int i=0 ; i<ncells_input_grid ; i++) input_area_weight[i]=1.0;
   }
 
   if(weights_exist){
 #pragma omp target teams distribute parallel for map(to:p_weight[:ncells_input_grid])
-    //map(present,alloc:input_area_weight[:ncells_input_grid])
     for(int i=0; i<ncells_input_grid; i++) input_area_weight[i] *= p_weight[i];
   }
 
@@ -681,13 +666,7 @@ void interp_data_order1( const Grid_config *output_grid, const Grid_config *inpu
   int ncells_input_grid = input_grid->nxc * input_grid->nyc;
   int ncells_output_grid = output_grid->nxc * output_grid->nyc;
 
-#pragma omp target data map(to:fieldin_data[:ncells_input_grid])
-  //map(present,alloc:minterp_acc[:1],minterp_acc->input_parent_cell_index[:nxcells], \
-  minterp_acc->output_parent_cell_index[:nxcells],                      \
-  minterp_acc->xcell_area[:nxcells],input_area_weight[:ncells_input_grid], \
-  fieldout_data[:ncells_output_grid],out_area[:ncells_output_grid],     \
-  out_miss[:ncells_output_grid])
-#pragma omp target teams distribute parallel for
+#pragma omp target teams distribute parallel for map(to:fieldin_data[:ncells_input_grid])
   for(int ix=0; ix<nxcells; ix++) {
     int ij1 = minterp_acc->input_parent_cell_index[ix];
     int ij2 = minterp_acc->output_parent_cell_index[ix];
@@ -721,15 +700,9 @@ void interp_data_order2( const Grid_config *output_grid, const Grid_config *inpu
   int output_nlon_cells = output_grid->nxc;
   int ncells_output_grid = output_nlon_cells * (output_grid->nyc);
 
-#pragma omp target data map(to:fieldin_data[:input_data_ncells],      \
+#pragma omp target data map(to:fieldin_data[:input_data_ncells],        \
                             grad_mask[:ncells_input_grid],grad_x[:ncells_input_grid], \
                             grad_y[:ncells_input_grid])
-  //map(present,alloc:minterp_acc[:1],                                  \
-  minterp_acc->input_parent_cell_index[:nxcells],                       \
-  minterp_acc->output_parent_cell_index[:nxcells],                      \
-  minterp_acc->xcell_area[:nxcells],input_area_weight[:ncells_input_grid], \
-  fieldout_data[:ncells_output_grid],out_area[:ncells_output_grid],     \
-  out_miss[:ncells_output_grid])
 #pragma omp target teams distribute parallel for
   for(int ix=0; ix<nxcells; ix++){
     int ij1 = minterp_acc->input_parent_cell_index[ix];
@@ -779,7 +752,7 @@ void get_bounding_indices_acc(const int ref_nlon_cells, const int ref_nlat_cells
 #pragma omp target map(tofrom:overlap_starts_here_index_tmp,overlap_ends_here_index_tmp) map(to:ref_min_lat,ref_max_lat)
   {
 #pragma omp teams distribute parallel for reduction(min:overlap_starts_here_index_tmp) \
-  reduction(max:overlap_ends_here_index_tmp) collapse(2) //map(present,alloc:grid_lat[:nlat_gridpts])
+  reduction(max:overlap_ends_here_index_tmp) collapse(2)
     for(int jlat=0; jlat<nlat_gridpts; jlat++) {
     for(int ilon=0; ilon<nlon_gridpts; ilon++) {
       double lat = grid_lat[jlat*nlon_gridpts+ilon];
