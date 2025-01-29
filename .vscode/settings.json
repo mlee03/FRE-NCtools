@@ -1,0 +1,64 @@
+{
+    "cSpell.words": [
+        "Balaji",
+        "Forrestal",
+        "fregrid",
+        "hght",
+        "Malyshev",
+        "Mohan",
+        "mppnccombine",
+        "NCEP",
+        "plevel",
+        "plevs",
+        "reananalysis",
+        "regridded",
+        "regridding",
+        "Sergey",
+        "sphum",
+        "Tauber",
+        "Tushar",
+        "Vahlenkamp",
+        "zsurf"
+    ],
+    "cSpell.languageSettings": [
+        {
+            // use with cpp or c files
+            "languageId": "cpp,c",
+            // turn off compound words, because it is only checking strings.
+            "allowCompoundWords": false,
+            // Only check comments and strings
+            "includeRegExpList": [
+                "CStyleComment",
+                "string"
+            ],
+            // Exclude includes, because they are also strings.
+            "ignoreRegExpList": [
+                "/#include.*/",
+            ]
+        }
+    ],
+    "makefile.dryrunSwitches": [
+        "--always-make",
+        "--print-directory",
+        "--dry-run",
+        "--assume-old=Makefile",
+        "Makefile",
+        "all",
+        "AM_MAKEFLAGS=--assume-old=Makefile Makefile"
+    ],
+    "fortran.linter.includePaths": [
+        "/opt/homebrew/include",
+        "${workspaceFolder}/**"
+    ],
+    "fortran.fortls.preprocessor.directories": [
+        "/opt/homebrew/include",
+        "./lib"
+    ],
+    "fortran.fortls.suffixes": [
+        "inc"
+    ],
+    "fortran.fortls.directories": [
+        "./**",
+        "/opt/homebrew/include"
+    ],
+}
